@@ -1,7 +1,14 @@
 import "server-only";
 
 import { demoMarketRates, demoProperty } from "@/lib/demo-data";
-import { MarketRatesResponse, PropertyResponse } from "@/lib/types";
+import {
+  BillingSessionResponse,
+  ErrorDashboardResponse,
+  MarketRatesResponse,
+  PropertyResponse,
+  ScrapingLegalNoticeResponse,
+  UsageSummaryResponse,
+} from "@/lib/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const ORG_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "00000000-0000-0000-0000-000000000001";
@@ -83,6 +90,56 @@ export async function pushPricing(payload: Record<string, unknown>) {
     method: "POST",
     json: payload,
   });
+}
+
+export async function createBillingCheckout(payload: { plan_code: string; property_quantity?: number }) {
+  return apiFetch<BillingSessionResponse>("/billing/checkout", {
+    method: "POST",
+    json: { property_quantity: 1, ...payload },
+  });
+}
+
+export async function getBillingUsage(): Promise<UsageSummaryResponse | null> {
+  try {
+    return await apiFetch<UsageSummaryResponse>("/billing/usage", {
+      next: { revalidate: 30 },
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function getScrapingLegalNotice(): Promise<ScrapingLegalNoticeResponse> {
+  try {
+    return await apiFetch<ScrapingLegalNoticeResponse>("/legal/scraping-notice", {
+      next: { revalidate: 3600 },
+    });
+  } catch {
+    return {
+      title: "Live market data and scraping notice",
+      body: "RentalRadar is designed for authorized rate intelligence and channel operations. This notice is product guidance, not legal advice.",
+      commitments: [
+        "Prefer official PMS and channel APIs when available.",
+        "Do not bypass paywalls, access controls, CAPTCHAs, or authentication barriers.",
+        "Use rate limits, retries, and proxies to reduce service impact.",
+      ],
+      user_responsibilities: [
+        "Connect only accounts and listings you are authorized to manage.",
+        "Review third-party platform terms before enabling automated pulls or pushes.",
+        "Validate recommendations before publishing rates to channels.",
+      ],
+    };
+  }
+}
+
+export async function getErrorDashboard(): Promise<ErrorDashboardResponse | null> {
+  try {
+    return await apiFetch<ErrorDashboardResponse>("/ops/errors", {
+      next: { revalidate: 30 },
+    });
+  } catch {
+    return null;
+  }
 }
 
 export { ORG_ID };

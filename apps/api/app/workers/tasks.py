@@ -13,6 +13,9 @@ from app.db.models import (
     AgentTrainingRun,
     AgentTrainingStatus,
     RateObservation,
+    PmsConnection,
+    PmsConnectionStatus,
+    PropertyPmsMapping,
     ScrapeJob,
     ScrapeJobLog,
     ScrapeJobStatus,
@@ -23,6 +26,7 @@ from app.db.session import SessionLocal
 from app.services.cache import JsonCache
 from app.services.pms import PmsConnectorRegistry
 from app.services.pricing_engine import generate_recommendations
+from app.services.usage import UsageLimitExceeded, require_usage_allowance
 from app.workers.celery_app import celery_app
 
 
@@ -184,6 +188,42 @@ def push_rate_to_pms(self, rate_push_id: str) -> dict:
         db.close()
 
 
+@celery_app.task(name="app.workers.tasks.pull_rates_from_pms", bind=True, max_retries=3)
+def pull_rates_from_pms(
+    self,
+    connection_id: str,
+    property_id: str,
+    start_date_iso: str,
+    end_date_iso: str,
+) -> dict:
+    db = SessionLocal()
+    try:
+        result = PmsConnectorRegistry().pull_rates(
+            db,
+            UUID(connection_id),
+            UUID(property_id),
+            date.fromisoformat(start_date_iso),
+            date.fromisoformat(end_date_iso),
+        )
+        if result.pulled_rates:
+            generate_recommendations(db, UUID(property_id))
+            JsonCache().delete(f"market-rates:{property_id}")
+        return {
+            "status": result.status,
+            "connection_id": connection_id,
+            "property_id": property_id,
+            "pulled_count": len(result.pulled_rates),
+            "fallback_used": result.fallback_used,
+        }
+    except Exception as exc:
+        db.rollback()
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=20 * (self.request.retries + 1))
+        return {"status": "failed", "connection_id": connection_id, "property_id": property_id, "error": str(exc)}
+    finally:
+        db.close()
+
+
 @celery_app.task(name="app.workers.tasks.run_scheduled_market_scans")
 def run_scheduled_market_scans() -> dict:
     db = SessionLocal()
@@ -197,9 +237,70 @@ def run_scheduled_market_scans() -> dict:
             .limit(100)
         ).all()
         for job in jobs:
+            try:
+                require_usage_allowance(
+                    db,
+                    job.organization_id,
+                    "scrape_job",
+                    property_id=job.property_id,
+                    source="scheduled_market_scan",
+                    idempotency_key=f"scheduled_scrape:{job.id}:{datetime.now(timezone.utc).date().isoformat()}",
+                )
+            except UsageLimitExceeded as exc:
+                db.add(
+                    ScrapeJobLog(
+                        scrape_job_id=job.id,
+                        level="warning",
+                        event="scrape.skipped_usage_limit",
+                        message=str(exc),
+                    )
+                )
+                continue
             job.status = ScrapeJobStatus.queued
             job.error_message = None
             run_scrape_job.delay(str(job.id))
+            queued += 1
+        db.commit()
+        return {"queued": queued}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.workers.tasks.sync_all_pms_connections")
+def sync_all_pms_connections() -> dict:
+    db = SessionLocal()
+    queued = 0
+    try:
+        mappings = db.scalars(
+            select(PropertyPmsMapping)
+            .join(PmsConnection, PmsConnection.id == PropertyPmsMapping.pms_connection_id)
+            .where(PropertyPmsMapping.active.is_(True))
+            .where(PmsConnection.status == PmsConnectionStatus.connected)
+            .limit(500)
+        ).all()
+        start = date.today()
+        end = start + timedelta(days=365)
+        for mapping in mappings:
+            connection = db.get(PmsConnection, mapping.pms_connection_id)
+            if connection is None:
+                continue
+            try:
+                require_usage_allowance(
+                    db,
+                    connection.organization_id,
+                    "pms_sync",
+                    property_id=mapping.property_id,
+                    source="scheduled_pms_sync",
+                    idempotency_key=f"scheduled_pms_sync:{mapping.id}:{start.isoformat()}",
+                )
+            except UsageLimitExceeded:
+                continue
+            pull_rates_from_pms.delay(
+                str(mapping.pms_connection_id),
+                str(mapping.property_id),
+                start.isoformat(),
+                end.isoformat(),
+            )
             queued += 1
         db.commit()
         return {"queued": queued}

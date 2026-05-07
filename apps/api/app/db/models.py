@@ -99,6 +99,25 @@ agent_training_status_enum = Enum(
     name="agent_training_status",
     create_type=False,
 )
+subscription_status_enum = Enum(
+    "trialing",
+    "active",
+    "past_due",
+    "paused",
+    "canceled",
+    "incomplete",
+    "incomplete_expired",
+    name="subscription_status",
+    create_type=False,
+)
+property_subscription_status_enum = Enum(
+    "active",
+    "paused",
+    "canceled",
+    "past_due",
+    name="property_subscription_status",
+    create_type=False,
+)
 
 
 class TimestampMixin:
@@ -159,6 +178,78 @@ class Property(Base, TimestampMixin):
     scrape_jobs: Mapped[list[ScrapeJob]] = relationship(back_populates="property")
     observations: Mapped[list[RateObservation]] = relationship(back_populates="property")
     recommendations: Mapped[list[PricingRecommendation]] = relationship(back_populates="property")
+
+
+class SubscriptionPlan(Base, TimestampMixin):
+    __tablename__ = "subscription_plans"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    code: Mapped[str] = mapped_column(Text, unique=True)
+    name: Mapped[str] = mapped_column(Text)
+    monthly_price_cents: Mapped[int] = mapped_column(Integer)
+    stripe_price_id: Mapped[str | None] = mapped_column(Text)
+    max_scrapes_per_property_month: Mapped[int] = mapped_column(Integer, default=300)
+    max_competitors_per_property: Mapped[int] = mapped_column(Integer, default=25)
+    supports_pms_push: Mapped[bool] = mapped_column(Boolean, default=False)
+    free_tier: Mapped[bool] = mapped_column(Boolean, default=False)
+    max_compute_units_per_month: Mapped[int] = mapped_column(Integer, default=10000)
+    max_jobs_per_day: Mapped[int] = mapped_column(Integer, default=200)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class OrganizationSubscription(Base, TimestampMixin):
+    __tablename__ = "organization_subscriptions"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(Text)
+    stripe_customer_id: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(subscription_status_enum, default="incomplete")
+    current_period_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class PropertySubscription(Base, TimestampMixin):
+    __tablename__ = "property_subscriptions"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    organization_subscription_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    property_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    plan_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    stripe_subscription_item_id: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(property_subscription_status_enum, default="active")
+    monthly_price_cents: Mapped[int] = mapped_column(Integer)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class UsageEvent(Base):
+    __tablename__ = "usage_events"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    property_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    event_type: Mapped[str] = mapped_column(Text)
+    compute_units: Mapped[int] = mapped_column(Integer, default=1)
+    source: Mapped[str] = mapped_column(Text, default="api")
+    idempotency_key: Mapped[str | None] = mapped_column(Text)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BillingEvent(Base):
+    __tablename__ = "billing_events"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    stripe_event_id: Mapped[str | None] = mapped_column(Text)
+    event_type: Mapped[str] = mapped_column(Text)
+    processed: Mapped[bool] = mapped_column(Boolean, default=False)
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class CompSet(Base, TimestampMixin):
@@ -478,12 +569,54 @@ class PmsConnection(Base, TimestampMixin):
     )
     access_token_encrypted: Mapped[str | None] = mapped_column(Text)
     refresh_token_encrypted: Mapped[str | None] = mapped_column(Text)
+    credentials_encrypted: Mapped[dict | None] = mapped_column(JSONB)
+    webhook_secret_encrypted: Mapped[str | None] = mapped_column(Text)
+    credential_fingerprint: Mapped[str | None] = mapped_column(Text)
+    credentials_version: Mapped[int] = mapped_column(Integer, default=1)
     token_cipher: Mapped[str] = mapped_column(Text, default="kms:aes-256-gcm")
     token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     scopes: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[str | None] = mapped_column(Text)
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+
+
+class PropertyPmsMapping(Base, TimestampMixin):
+    __tablename__ = "property_pms_mappings"
+    __table_args__ = (
+        UniqueConstraint("property_id", "pms_connection_id"),
+        UniqueConstraint("pms_connection_id", "external_property_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    property_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    pms_connection_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    external_property_id: Mapped[str] = mapped_column(Text)
+    external_channel_ids: Mapped[dict] = mapped_column(JSONB, default=dict)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class PmsSyncRun(Base):
+    __tablename__ = "pms_sync_runs"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    pms_connection_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    property_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    direction: Mapped[str] = mapped_column(Text)
+    provider: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, default="queued")
+    fallback_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pulled_count: Mapped[int] = mapped_column(Integer, default=0)
+    pushed_count: Mapped[int] = mapped_column(Integer, default=0)
+    skipped_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    request_summary: Mapped[dict] = mapped_column(JSONB, default=dict)
+    response_summary: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class RatePush(Base, TimestampMixin):

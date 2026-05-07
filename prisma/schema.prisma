@@ -120,6 +120,8 @@ model Organization {
   subscriptions         OrganizationSubscription[]
   properties            Property[]
   pmsConnections        PmsConnection[]
+  usageEvents           UsageEvent[]
+  billingEvents         BillingEvent[]
 
   @@map("organizations")
 }
@@ -163,6 +165,9 @@ model SubscriptionPlan {
   maxScrapesPerPropertyMonth Int                    @default(300) @map("max_scrapes_per_property_month")
   maxCompetitorsPerProperty  Int                    @default(25) @map("max_competitors_per_property")
   supportsPmsPush            Boolean                @default(false) @map("supports_pms_push")
+  freeTier                   Boolean                @default(false) @map("free_tier")
+  maxComputeUnitsPerMonth    Int                    @default(10000) @map("max_compute_units_per_month")
+  maxJobsPerDay              Int                    @default(200) @map("max_jobs_per_day")
   metadata                   Json                   @default("{}")
   active                     Boolean                @default(true)
   createdAt                  DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -224,6 +229,7 @@ model Property {
   rateObservations      RateObservation[]
   pricingRecommendations PricingRecommendation[]
   ratePushes            RatePush[]
+  usageEvents           UsageEvent[]
 
   @@index([organizationId])
   @@map("properties")
@@ -246,6 +252,40 @@ model PropertySubscription {
   plan                       SubscriptionPlan             @relation(fields: [planId], references: [id])
 
   @@map("property_subscriptions")
+}
+
+model UsageEvent {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  propertyId     String?      @map("property_id") @db.Uuid
+  eventType      String       @map("event_type")
+  computeUnits   Int          @default(1) @map("compute_units")
+  source         String       @default("api")
+  idempotencyKey String?      @map("idempotency_key")
+  metadata       Json         @default("{}")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property       Property?    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, createdAt])
+  @@index([propertyId, createdAt])
+  @@map("usage_events")
+}
+
+model BillingEvent {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String?       @map("organization_id") @db.Uuid
+  stripeEventId  String?       @unique @map("stripe_event_id")
+  eventType      String        @map("event_type")
+  processed      Boolean       @default(false)
+  payload        Json          @default("{}")
+  errorMessage   String?       @map("error_message")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@map("billing_events")
 }
 
 model CompSet {
@@ -309,10 +349,15 @@ model PmsConnection {
   status                PmsConnectionStatus  @default(connected)
   accessTokenEncrypted  String?              @map("access_token_encrypted")
   refreshTokenEncrypted String?              @map("refresh_token_encrypted")
+  credentialsEncrypted  Json?                @map("credentials_encrypted")
+  webhookSecretEncrypted String?             @map("webhook_secret_encrypted")
+  credentialFingerprint String?              @map("credential_fingerprint")
+  credentialsVersion    Int                  @default(1) @map("credentials_version")
   tokenCipher           String               @default("kms:aes-256-gcm") @map("token_cipher")
   tokenExpiresAt        DateTime?            @map("token_expires_at") @db.Timestamptz(6)
   scopes                String[]             @default([])
   lastVerifiedAt        DateTime?            @map("last_verified_at") @db.Timestamptz(6)
+  lastSyncAt            DateTime?            @map("last_sync_at") @db.Timestamptz(6)
   errorMessage          String?              @map("error_message")
   metadata              Json                 @default("{}")
   createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -340,6 +385,30 @@ model PropertyPmsMapping {
   @@unique([propertyId, pmsConnectionId])
   @@unique([pmsConnectionId, externalPropertyId])
   @@map("property_pms_mappings")
+}
+
+model PmsSyncRun {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String    @map("organization_id") @db.Uuid
+  pmsConnectionId String    @map("pms_connection_id") @db.Uuid
+  propertyId      String?   @map("property_id") @db.Uuid
+  direction       String
+  provider        String
+  status          String    @default("queued")
+  fallbackUsed    Boolean   @default(false) @map("fallback_used")
+  startedAt       DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(6)
+  pulledCount     Int       @default(0) @map("pulled_count")
+  pushedCount     Int       @default(0) @map("pushed_count")
+  skippedCount    Int       @default(0) @map("skipped_count")
+  errorMessage    String?   @map("error_message")
+  requestSummary  Json      @default("{}") @map("request_summary")
+  responseSummary Json      @default("{}") @map("response_summary")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([pmsConnectionId, createdAt])
+  @@index([propertyId, createdAt])
+  @@map("pms_sync_runs")
 }
 
 model ScraperStrategy {

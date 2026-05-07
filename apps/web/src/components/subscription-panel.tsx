@@ -30,11 +30,14 @@ export function SubscriptionPanel() {
               action={action}
               className="grid gap-3 rounded-lg border p-4 sm:grid-cols-[1fr_auto] sm:items-center"
             >
-              <input type="hidden" name="plan" value={plan.name} />
+              <input type="hidden" name="planCode" value={plan.code} />
+              <input type="hidden" name="propertyQuantity" value="1" />
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold">{plan.name}</p>
-                  <Badge variant={plan.code === "growth_6" ? "warning" : "secondary"}>${plan.price}/property</Badge>
+                  <Badge variant={plan.code === "growth_6" ? "warning" : "secondary"}>
+                    {plan.price === 0 ? "Free" : `$${plan.price}/property`}
+                  </Badge>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-3 text-sm text-muted-foreground">
                   <span className="inline-flex items-center gap-1">
@@ -51,7 +54,7 @@ export function SubscriptionPanel() {
                   </span>
                 </div>
               </div>
-              <SubmitButton>Select</SubmitButton>
+              <SubmitButton>{plan.price === 0 ? "Start" : "Checkout"}</SubmitButton>
             </form>
           ))}
           {state.message ? (

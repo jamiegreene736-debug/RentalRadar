@@ -35,6 +35,7 @@ from app.schemas import (
     PricingRunResponse,
 )
 from app.services.pricing_engine import experiment_results, generate_recommendations
+from app.services.usage import UsageLimitExceeded, require_usage_allowance
 from app.workers.tasks import push_rate_to_pms
 
 router = APIRouter(tags=["pricing"])
@@ -112,6 +113,10 @@ def run_recommendations(
     context: RequestContext = Depends(get_request_context),
 ) -> PricingRunResponse:
     rental = _get_property(db, payload.property_id, context.organization_id)
+    try:
+        require_usage_allowance(db, context.organization_id, "pricing_run", property_id=rental.id)
+    except UsageLimitExceeded as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     recommendations = generate_recommendations(
         db,
         property_id=rental.id,
@@ -229,6 +234,16 @@ def push_pricing(
     connections = _resolve_connections(db, context.organization_id, payload.pms_connection_id)
     if not connections:
         raise HTTPException(status_code=400, detail="No connected PMS/channel connection found")
+    try:
+        require_usage_allowance(
+            db,
+            context.organization_id,
+            "rate_push",
+            property_id=rental.id,
+            units=max(1, len(connections) * len(payload.rates)) * 4,
+        )
+    except UsageLimitExceeded as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
 
     rate_pushes: list[RatePush] = []
     for connection in connections:

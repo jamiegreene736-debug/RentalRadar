@@ -165,6 +165,37 @@ class PropertyCreate(CamelModel):
     max_price_cents: int | None = None
 
 
+class SubscriptionPlan(CamelModel):
+    id: UUID
+    code: str
+    name: str
+    monthly_price_cents: int
+    stripe_price_id: str | None = None
+    max_scrapes_per_property_month: int
+    max_competitors_per_property: int
+    supports_pms_push: bool
+    free_tier: bool = False
+    max_compute_units_per_month: int = 10000
+    max_jobs_per_day: int = 200
+    metadata: JsonValue
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class OrganizationSubscription(CamelModel):
+    id: UUID
+    organization_id: UUID
+    stripe_subscription_id: str | None = None
+    stripe_customer_id: str | None = None
+    status: SubscriptionStatus
+    current_period_start: datetime | None = None
+    current_period_end: datetime | None = None
+    cancel_at_period_end: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 class PropertySubscription(CamelModel):
     id: UUID
     organization_subscription_id: UUID | None = None
@@ -177,6 +208,29 @@ class PropertySubscription(CamelModel):
     ends_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class UsageEvent(CamelModel):
+    id: UUID
+    organization_id: UUID
+    property_id: UUID | None = None
+    event_type: str
+    compute_units: int
+    source: str
+    idempotency_key: str | None = None
+    metadata: JsonValue
+    created_at: datetime
+
+
+class BillingEvent(CamelModel):
+    id: UUID
+    organization_id: UUID | None = None
+    stripe_event_id: str | None = None
+    event_type: str
+    processed: bool
+    payload: JsonValue
+    error_message: str | None = None
+    created_at: datetime
 
 
 class CompSet(CamelModel):
@@ -227,14 +281,39 @@ class PmsConnection(CamelModel):
     status: PmsConnectionStatus
     access_token_encrypted: str | None = None
     refresh_token_encrypted: str | None = None
+    credentials_encrypted: JsonValue | None = None
+    webhook_secret_encrypted: str | None = None
+    credential_fingerprint: str | None = None
+    credentials_version: int = 1
     token_cipher: str
     token_expires_at: datetime | None = None
     scopes: list[str]
     last_verified_at: datetime | None = None
+    last_sync_at: datetime | None = None
     error_message: str | None = None
     metadata: JsonValue
     created_at: datetime
     updated_at: datetime
+
+
+class PmsSyncRun(CamelModel):
+    id: UUID
+    organization_id: UUID
+    pms_connection_id: UUID
+    property_id: UUID | None = None
+    direction: str
+    provider: str
+    status: str
+    fallback_used: bool
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    pulled_count: int
+    pushed_count: int
+    skipped_count: int
+    error_message: str | None = None
+    request_summary: JsonValue
+    response_summary: JsonValue
+    created_at: datetime
 
 
 class ScraperStrategy(CamelModel):

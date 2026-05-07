@@ -20,8 +20,18 @@ class Settings(BaseSettings):
     scraper_proxy_urls: list[str] = Field(default_factory=list)
     llm_provider: str = "stub"
     openai_api_key: str | None = None
+    stripe_secret_key: str | None = None
+    stripe_webhook_secret: str | None = None
+    stripe_price_starter: str | None = None
+    stripe_price_growth: str | None = None
+    stripe_price_pro: str | None = None
+    app_base_url: str = "http://localhost:3000"
+    api_rate_limit_per_minute: int = 120
+    free_tier_property_limit: int = 1
     default_market_scan_days: int = 90
     default_comp_limit: int = 12
+    integration_http_timeout_seconds: float = 30.0
+    integration_max_retries: int = 3
     scraper_headless: bool = True
     scraper_stealth: bool = True
     cors_origins: list[AnyHttpUrl] | list[str] = Field(default_factory=lambda: ["*"])

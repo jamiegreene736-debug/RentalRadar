@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from fastapi import Depends, Header, HTTPException, status
-from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 

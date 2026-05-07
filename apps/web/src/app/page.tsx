@@ -3,18 +3,20 @@ import { RefreshCcw, SatelliteDish } from "lucide-react";
 import { refreshPricingAction } from "@/app/actions";
 import { AddressMap } from "@/components/address-map";
 import { CompetitiveInsight } from "@/components/competitive-insight";
+import { ErrorDashboard } from "@/components/error-dashboard";
 import { MarketRateChart } from "@/components/market-rate-chart";
 import { MetricsStrip } from "@/components/metrics-strip";
 import { PmsConnectPanel } from "@/components/pms-connect-panel";
 import { PropertySearchForm } from "@/components/property-search-form";
 import { RecommendationsTable } from "@/components/recommendations-table";
+import { ScrapingLegalNotice } from "@/components/scraping-legal-notice";
 import { SourceBreakdown } from "@/components/source-breakdown";
 import { SubscriptionPanel } from "@/components/subscription-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { demoProperty } from "@/lib/demo-data";
-import { getMarketRates } from "@/lib/api";
+import { getErrorDashboard, getMarketRates, getScrapingLegalNotice } from "@/lib/api";
 
 export default async function DashboardPage({
   searchParams,
@@ -24,6 +26,8 @@ export default async function DashboardPage({
   const params = await searchParams;
   const propertyId = params?.propertyId ?? demoProperty.id;
   const market = await getMarketRates(propertyId);
+  const legalNotice = await getScrapingLegalNotice();
+  const errors = await getErrorDashboard();
   const property = demoProperty.id === propertyId ? demoProperty : { ...demoProperty, id: propertyId };
   const nextRecommendation = market.recommendations[0];
 
@@ -86,7 +90,9 @@ export default async function DashboardPage({
           </Card>
           <div className="grid content-start gap-5">
             <PmsConnectPanel />
+            <ErrorDashboard dashboard={errors} />
             <SubscriptionPanel />
+            <ScrapingLegalNotice notice={legalNotice} />
           </div>
         </div>
       </div>

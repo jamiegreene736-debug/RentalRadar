@@ -92,6 +92,9 @@ export interface SubscriptionPlan {
   maxScrapesPerPropertyMonth: number;
   maxCompetitorsPerProperty: number;
   supportsPmsPush: boolean;
+  freeTier: boolean;
+  maxComputeUnitsPerMonth: number;
+  maxJobsPerDay: number;
   metadata: JsonValue;
   active: boolean;
   createdAt: ISODateTime;
@@ -153,6 +156,29 @@ export interface PropertySubscription {
   updatedAt: ISODateTime;
 }
 
+export interface UsageEvent {
+  id: UUID;
+  organizationId: UUID;
+  propertyId: UUID | null;
+  eventType: "scrape_job" | "pms_sync" | "pricing_run" | "rate_push" | "api_request";
+  computeUnits: number;
+  source: string;
+  idempotencyKey: string | null;
+  metadata: JsonValue;
+  createdAt: ISODateTime;
+}
+
+export interface BillingEvent {
+  id: UUID;
+  organizationId: UUID | null;
+  stripeEventId: string | null;
+  eventType: string;
+  processed: boolean;
+  payload: JsonValue;
+  errorMessage: string | null;
+  createdAt: ISODateTime;
+}
+
 export interface CompSet {
   id: UUID;
   propertyId: UUID;
@@ -201,14 +227,39 @@ export interface PmsConnection {
   status: PmsConnectionStatus;
   accessTokenEncrypted: string | null;
   refreshTokenEncrypted: string | null;
+  credentialsEncrypted: JsonValue | null;
+  webhookSecretEncrypted: string | null;
+  credentialFingerprint: string | null;
+  credentialsVersion: number;
   tokenCipher: string;
   tokenExpiresAt: ISODateTime | null;
   scopes: string[];
   lastVerifiedAt: ISODateTime | null;
+  lastSyncAt: ISODateTime | null;
   errorMessage: string | null;
   metadata: JsonValue;
   createdAt: ISODateTime;
   updatedAt: ISODateTime;
+}
+
+export interface PmsSyncRun {
+  id: UUID;
+  organizationId: UUID;
+  pmsConnectionId: UUID;
+  propertyId: UUID | null;
+  direction: "pull_rates" | "push_rates" | "pull_reservations" | "two_way";
+  provider: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "partial" | "skipped";
+  fallbackUsed: boolean;
+  startedAt: ISODateTime | null;
+  completedAt: ISODateTime | null;
+  pulledCount: number;
+  pushedCount: number;
+  skippedCount: number;
+  errorMessage: string | null;
+  requestSummary: JsonValue;
+  responseSummary: JsonValue;
+  createdAt: ISODateTime;
 }
 
 export interface PropertyPmsMapping {

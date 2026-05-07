@@ -80,3 +80,46 @@ export type Plan = {
   comps: string;
   push: boolean;
 };
+
+export type BillingSessionResponse = {
+  url: string;
+  mode?: string | null;
+  session_id?: string | null;
+};
+
+export type UsageSummaryResponse = {
+  plan: {
+    code: string;
+    name: string;
+    free_tier: boolean;
+    monthly_price_cents: number;
+    max_compute_units_per_month: number;
+    max_jobs_per_day: number;
+    max_scrapes_per_property_month: number;
+  };
+  usage: {
+    compute_units_month: number;
+    jobs_today: number;
+    period_start: string;
+    next_reset_estimate: string;
+  };
+};
+
+export type ScrapingLegalNoticeResponse = {
+  title: string;
+  body: string;
+  commitments: string[];
+  user_responsibilities: string[];
+};
+
+export type ErrorDashboardResponse = {
+  counts: Record<string, number>;
+  recent_errors: Array<{
+    id: string;
+    source: string;
+    status: string;
+    message: string | null;
+    created_at: string | null;
+    detail: Record<string, unknown>;
+  }>;
+};

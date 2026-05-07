@@ -19,6 +19,7 @@ from app.schemas import (
 )
 from app.services.cache import JsonCache
 from app.services.market import create_property_and_jobs, get_market_rates
+from app.services.usage import BillingRequired, UsageLimitExceeded, ensure_property_allowed, require_usage_allowance
 from app.workers.tasks import run_scrape_job
 
 router = APIRouter(tags=["properties"])
@@ -30,6 +31,21 @@ def create_property(
     db: Session = Depends(get_db),
     context: RequestContext = Depends(get_request_context),
 ) -> PropertyResponse:
+    try:
+        ensure_property_allowed(db, context.organization_id)
+        require_usage_allowance(
+            db,
+            context.organization_id,
+            "scrape_job",
+            units=(len(payload.comp_urls) or 3) * 25,
+            source="property_create.preflight",
+            record=False,
+        )
+    except BillingRequired as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
+    except UsageLimitExceeded as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+
     rental, jobs = create_property_and_jobs(
         db=db,
         organization_id=context.organization_id,
@@ -46,7 +62,16 @@ def create_property(
         scan_days=payload.scan_days,
     )
     for job in jobs:
+        require_usage_allowance(
+            db,
+            context.organization_id,
+            "scrape_job",
+            property_id=rental.id,
+            source="property_create",
+            idempotency_key=f"scrape_job:{job.id}",
+        )
         run_scrape_job.delay(str(job.id))
+    db.commit()
 
     return PropertyResponse(
         id=rental.id,

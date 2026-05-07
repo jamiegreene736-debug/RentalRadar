@@ -26,6 +26,8 @@ celery_app.conf.update(
         "app.workers.tasks.run_scrape_job": {"queue": "scraping"},
         "app.workers.tasks.run_scheduled_market_scans": {"queue": "scheduler"},
         "app.workers.tasks.push_rate_to_pms": {"queue": "pms"},
+        "app.workers.tasks.pull_rates_from_pms": {"queue": "pms"},
+        "app.workers.tasks.sync_all_pms_connections": {"queue": "scheduler"},
     },
 )
 
@@ -33,5 +35,9 @@ celery_app.conf.beat_schedule = {
     "scheduled-market-scans-hourly": {
         "task": "app.workers.tasks.run_scheduled_market_scans",
         "schedule": crontab(minute=7),
-    }
+    },
+    "scheduled-pms-two-way-sync": {
+        "task": "app.workers.tasks.sync_all_pms_connections",
+        "schedule": crontab(minute="*/30"),
+    },
 }

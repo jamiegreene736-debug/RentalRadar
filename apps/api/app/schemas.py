@@ -81,6 +81,11 @@ class PmsConnectRequest(BaseModel):
     api_key: str | None = None
     access_token: str | None = None
     refresh_token: str | None = None
+    username: str | None = None
+    password: str | None = None
+    client_id: str | None = None
+    client_secret: str | None = None
+    webhook_secret: str | None = None
     oauth_code: str | None = None
     redirect_uri: str | None = None
     scopes: list[str] = Field(default_factory=list)
@@ -92,6 +97,39 @@ class PmsConnectResponse(BaseModel):
     provider: PmsProvider
     account_ref: str | None
     status: str
+    credential_fingerprint: str | None = None
+
+
+class PropertyPmsMappingRequest(BaseModel):
+    property_id: UUID
+    pms_connection_id: UUID
+    external_property_id: str
+    external_channel_ids: dict[str, Any] = Field(default_factory=dict)
+
+
+class PropertyPmsMappingResponse(BaseModel):
+    id: UUID
+    property_id: UUID
+    pms_connection_id: UUID
+    external_property_id: str
+    active: bool
+
+
+class PmsSyncRequest(BaseModel):
+    property_id: UUID
+    pms_connection_id: UUID
+    start_date: date
+    end_date: date
+    direction: str = Field(default="pull_rates", pattern="^(pull_rates|two_way)$")
+    rates: list["PricingPushItem"] = Field(default_factory=list)
+
+
+class PmsSyncResponse(BaseModel):
+    status: str
+    pulled_count: int = 0
+    pushed_count: int = 0
+    fallback_used: bool = False
+    detail: dict[str, Any] = Field(default_factory=dict)
 
 
 class PricingPushItem(BaseModel):
@@ -214,3 +252,61 @@ class OccupancySignalResponse(BaseModel):
     property_occupancy: float | None
     market_occupancy: float | None
     pacing_ratio: float | None
+
+
+class BillingCheckoutRequest(BaseModel):
+    plan_code: str = Field(default="starter_3", min_length=3)
+    property_quantity: int = Field(default=1, ge=1, le=5000)
+
+
+class BillingPortalRequest(BaseModel):
+    return_url: str | None = None
+
+
+class BillingSessionResponse(BaseModel):
+    url: str
+    mode: str | None = None
+    session_id: str | None = None
+
+
+class UsagePlanSummary(BaseModel):
+    code: str
+    name: str
+    free_tier: bool
+    monthly_price_cents: int
+    max_compute_units_per_month: int
+    max_jobs_per_day: int
+    max_scrapes_per_property_month: int
+
+
+class UsageCounters(BaseModel):
+    compute_units_month: int
+    jobs_today: int
+    period_start: datetime
+    next_reset_estimate: datetime
+
+
+class UsageSummaryResponse(BaseModel):
+    plan: UsagePlanSummary
+    usage: UsageCounters
+
+
+class ErrorDashboardItem(BaseModel):
+    id: UUID | str
+    source: str
+    status: str
+    message: str | None = None
+    created_at: datetime | None = None
+    detail: dict[str, Any] = Field(default_factory=dict)
+
+
+class ErrorDashboardResponse(BaseModel):
+    counts: dict[str, int]
+    recent_errors: list[ErrorDashboardItem]
+
+
+class ScrapingLegalNoticeResponse(BaseModel):
+    title: str
+    body: str
+    commitments: list[str]
+    user_responsibilities: list[str]

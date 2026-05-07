@@ -1,8 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
-import { connectPms, createProperty, pushPricing, runPricing } from "@/lib/api";
+import { connectPms, createBillingCheckout, createProperty, pushPricing, runPricing } from "@/lib/api";
 import { ActionState } from "@/lib/types";
 
 function numberValue(formData: FormData, key: string) {
@@ -79,6 +80,16 @@ export async function refreshPricingAction(formData: FormData) {
 }
 
 export async function subscribeAction(_: ActionState, formData: FormData): Promise<ActionState> {
-  const plan = String(formData.get("plan"));
-  return { ok: true, message: `${plan} selected. Stripe checkout can attach here when billing endpoints are enabled.` };
+  const planCode = String(formData.get("planCode"));
+  const quantity = Number(formData.get("propertyQuantity") ?? 1);
+  let session;
+  try {
+    session = await createBillingCheckout({
+      plan_code: planCode,
+      property_quantity: Number.isFinite(quantity) ? quantity : 1,
+    });
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Unable to start billing checkout." };
+  }
+  redirect(session.url);
 }
