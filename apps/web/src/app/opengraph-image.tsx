@@ -38,10 +38,10 @@ export default function Image() {
         </div>
         <div>
           <div style={{ fontSize: 78, lineHeight: 0.96, fontWeight: 800, maxWidth: 920 }}>
-            The Only Pricing Tool That Finally Gets It
+            AI Pricing Agents Built to Beat Beyond Pricing
           </div>
           <div style={{ marginTop: 28, fontSize: 30, color: "#a7f3ff", maxWidth: 940 }}>
-            AI agents train Playwright in real headed Chrome for live Airbnb, VRBO, Booking.com, and PMS rates.
+            Live marketplace pages, self-training AI, and direct rate pushes instead of stale feeds.
           </div>
         </div>
         <div style={{ display: "flex", gap: 16, fontSize: 24, color: "#d7fbff" }}>

@@ -24,9 +24,9 @@ export const metadata: Metadata = {
     "PMS revenue management",
   ],
   openGraph: {
-    title: "RentalRadar.ai | The Only Pricing Tool That Finally Gets It",
+    title: "RentalRadar.ai | AI Pricing Agents Built to Beat Beyond Pricing",
     description:
-      "AI agents train Playwright in real headed Chrome, scrape live market rates, and auto-push optimized prices to Airbnb, VRBO, Booking.com, and PMS channels.",
+      "RentalRadar trains AI agents on live Airbnb, VRBO, and Booking.com pages, then auto-pushes smarter rates without relying on stale feeds.",
     url: "https://rentalradar.ai",
     siteName: "RentalRadar.ai",
     images: [
