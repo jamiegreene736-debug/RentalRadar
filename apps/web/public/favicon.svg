@@ -47,9 +47,4 @@
   <path d="M23 33.5v12.5h16V33.5" fill="#07111F" fill-opacity="0.8" stroke="url(#home)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M31 46v-8.3h7.1" stroke="url(#ai)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
   <circle cx="30" cy="31" r="2.4" fill="#67E8F9" filter="url(#glow)"/>
-  <path d="M48.5 42 54 36.5 59.5 42" stroke="url(#ai)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="48.5" cy="42" r="2.6" fill="#22D3EE"/>
-  <circle cx="54" cy="36.5" r="2.8" fill="#FBBF24"/>
-  <circle cx="59.5" cy="42" r="2.6" fill="#2DD4BF"/>
-  <circle cx="54" cy="36.5" r="1.1" fill="#FFFBEB"/>
 </svg>

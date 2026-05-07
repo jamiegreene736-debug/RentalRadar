@@ -63,11 +63,6 @@ export function BrandMark({ className, title = "RentalRadar.AI" }: SVGProps<SVGS
       <path d="M22.8 31.8v12.4h16.4V31.8" fill="#07111F" fillOpacity="0.78" stroke="url(#brand-mark-home)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.4" />
       <path d="M31 44.2v-8.4h7.2" fill="none" stroke="url(#brand-mark-ai)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.4" />
       <circle cx="31" cy="29" r="2.4" fill="#67E8F9" filter="url(#brand-mark-glow)" />
-      <path d="M55.5 33.5 63 26l7.5 7.5" fill="none" stroke="url(#brand-mark-ai)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
-      <circle cx="55.5" cy="33.5" r="3" fill="#22D3EE" />
-      <circle cx="63" cy="26" r="3.2" fill="#FBBF24" />
-      <circle cx="70.5" cy="33.5" r="3" fill="#2DD4BF" />
-      <circle cx="63" cy="26" r="1.2" fill="#FFFBEB" />
     </svg>
   );
 }

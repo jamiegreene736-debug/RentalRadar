@@ -49,11 +49,6 @@
   <path d="M44 51.5v17h24v-17" fill="#07111F" fill-opacity="0.82" stroke="url(#home)" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M57 68.5V56.5h10.5" stroke="url(#ai)" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
   <circle cx="58" cy="49" r="3" fill="#67E8F9" filter="url(#glow)"/>
-  <path d="M94 61 103 52l9 9" stroke="url(#ai)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="94" cy="61" r="3.5" fill="#22D3EE"/>
-  <circle cx="103" cy="52" r="3.8" fill="#FBBF24"/>
-  <circle cx="112" cy="61" r="3.5" fill="#2DD4BF"/>
-  <circle cx="103" cy="52" r="1.4" fill="#FFFBEB"/>
   <text x="154" y="57" fill="#F8FAFC" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="750">RentalRadar</text>
   <text x="365" y="57" fill="#67E8F9" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="750">.AI</text>
   <text x="156" y="75" fill="#94A3B8" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="650" letter-spacing="2.4">VACATION RENTAL PRICING</text>
