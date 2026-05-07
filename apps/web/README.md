@@ -28,6 +28,18 @@ NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/dashboard
 
 Without Clerk keys, `/sign-in` and `/sign-up` render a setup notice and `/dashboard` remains accessible for local development. With Clerk keys present, `/dashboard` requires a signed-in user.
 
+### Google Sign-In
+
+The `/sign-in` and `/sign-up` pages use Clerk's hosted auth components. To show the Google button:
+
+1. Open the Clerk Dashboard for the RentalRadar application.
+2. Go to Configure > SSO connections or Social connections.
+3. Enable Google.
+4. Add the production callback URL Clerk shows you to the Google Cloud OAuth client.
+5. Make sure the Railway environment has the Clerk publishable and secret keys above, then redeploy.
+
+Once Google is enabled in Clerk, the existing sign-in and sign-up pages automatically show "Continue with Google" alongside email login.
+
 The dashboard reads from `NEXT_PUBLIC_API_BASE_URL` and sends the temporary development auth headers expected by the FastAPI backend.
 
 ## Surfaces

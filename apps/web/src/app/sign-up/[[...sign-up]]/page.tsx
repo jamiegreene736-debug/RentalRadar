@@ -14,7 +14,7 @@ export default function SignUpPage() {
   }
 
   return (
-    <AuthShell eyebrow="Create Account" title="Start pricing your first property">
+    <AuthShell eyebrow="Create Account" title="Create an account with Google or email">
       <SignUp
         path={signUpPath}
         routing="path"
@@ -30,8 +30,8 @@ function AuthSetupNotice({ mode }: { mode: "sign-up" }) {
   return (
     <AuthShell eyebrow="Auth Setup" title="Clerk keys are needed before account creation is live">
       <div className="max-w-md rounded-2xl border border-cyan-200/15 bg-white/[0.06] p-6 text-sm leading-6 text-slate-300">
-        Add `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` in Railway, then redeploy. The {mode} page will render
-        the hosted Clerk account flow automatically.
+        Add `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` in Railway, enable Google in Clerk Social Connections,
+        then redeploy. The {mode} page will render Google and email account creation automatically.
         <Link href={afterAuthPath} className="mt-5 inline-flex text-cyan-200 hover:text-cyan-100">
           Open dashboard while auth is being configured
         </Link>
@@ -52,7 +52,8 @@ function AuthShell({ eyebrow, title, children }: { eyebrow: string; title: strin
           <p className="mt-10 text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">{eyebrow}</p>
           <h1 className="mt-4 max-w-xl text-4xl font-semibold tracking-normal text-white sm:text-6xl">{title}</h1>
           <p className="mt-5 max-w-lg text-lg leading-8 text-slate-300">
-            Secure access is handled by Clerk, then your dashboard uses RentalRadar's pricing, scraping, and connection tools.
+            Continue with Google for the fastest setup, or use email. Clerk handles secure account access before opening the
+            RentalRadar dashboard.
           </p>
         </div>
         <div className="flex justify-center lg:justify-end">{children}</div>
