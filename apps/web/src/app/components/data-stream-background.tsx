@@ -29,10 +29,10 @@ export function DataStreamBackground() {
         });
       }}
       style={{
-        background: `radial-gradient(circle at ${pointer.x}% ${pointer.y}%, rgba(34, 211, 238, 0.2), transparent 28%), radial-gradient(circle at 70% 20%, rgba(45, 212, 191, 0.12), transparent 34%)`,
+        background: `radial-gradient(circle at ${pointer.x}% ${pointer.y}%, rgba(34, 211, 238, 0.13), transparent 28%), radial-gradient(circle at 70% 20%, rgba(45, 212, 191, 0.08), transparent 34%)`,
       }}
     >
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(34,211,238,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.06)_1px,transparent_1px)] bg-[size:72px_72px] [mask-image:linear-gradient(to_bottom,black,transparent_86%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(14,116,144,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(14,116,144,0.04)_1px,transparent_1px)] bg-[size:72px_72px] [mask-image:linear-gradient(to_bottom,black,transparent_86%)]" />
       {streams.map((stream) => (
         <motion.span
           key={stream.id}

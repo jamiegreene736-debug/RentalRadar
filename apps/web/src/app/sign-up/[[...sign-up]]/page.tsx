@@ -42,8 +42,8 @@ function AuthSetupNotice({ mode }: { mode: "sign-up" }) {
 
 function AuthShell({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
   return (
-    <main className="grid min-h-screen place-items-center bg-[#050816] px-4 py-12 text-white">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_25%_15%,rgba(34,211,238,0.16),transparent_28%),radial-gradient(circle_at_80%_10%,rgba(45,212,191,0.12),transparent_24%)]" />
+    <main className="radar-light grid min-h-screen place-items-center px-4 py-12">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_25%_15%,rgba(34,211,238,0.24),transparent_28%),radial-gradient(circle_at_80%_10%,rgba(45,212,191,0.18),transparent_24%)]" />
       <div className="relative grid w-full max-w-5xl gap-8 lg:grid-cols-[0.9fr_1fr] lg:items-center">
         <div>
           <Link href="/" className="text-sm font-semibold text-cyan-200 hover:text-cyan-100">
@@ -66,14 +66,14 @@ const clerkAppearance = {
   elements: {
     rootBox: "w-full max-w-md",
     cardBox: "w-full shadow-2xl",
-    card: "bg-slate-950/90 border border-white/10 text-white",
-    headerTitle: "text-white",
-    headerSubtitle: "text-slate-400",
-    socialButtonsBlockButton: "border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]",
-    formFieldLabel: "text-slate-300",
-    formFieldInput: "bg-white/[0.04] border-white/10 text-white",
-    footerActionText: "text-slate-400",
-    footerActionLink: "text-cyan-200 hover:text-cyan-100",
+    card: "bg-white/90 border border-cyan-900/10 text-slate-950 shadow-[0_32px_90px_rgba(14,116,144,0.16)]",
+    headerTitle: "text-slate-950",
+    headerSubtitle: "text-slate-500",
+    socialButtonsBlockButton: "border-slate-200 bg-white text-slate-950 hover:bg-cyan-50",
+    formFieldLabel: "text-slate-700",
+    formFieldInput: "bg-white border-slate-200 text-slate-950",
+    footerActionText: "text-slate-500",
+    footerActionLink: "text-cyan-700 hover:text-cyan-600",
     formButtonPrimary: "bg-cyan-300 text-slate-950 hover:bg-cyan-200",
   },
 };

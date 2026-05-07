@@ -8,7 +8,7 @@ import { SiteHeader } from "@/app/components/site-header";
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen overflow-hidden bg-[#050816] text-white">
+    <main className="radar-light min-h-screen overflow-hidden">
       <SiteHeader />
       <HeroSection />
       <HowItWorks />

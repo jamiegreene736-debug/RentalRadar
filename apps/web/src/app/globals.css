@@ -42,8 +42,105 @@
 
   ::selection {
     background: rgba(34, 211, 238, 0.32);
-    color: white;
+    color: rgb(15, 23, 42);
   }
+}
+
+.radar-light {
+  background:
+    radial-gradient(circle at 18% 10%, rgba(103, 232, 249, 0.28), transparent 30%),
+    radial-gradient(circle at 82% 8%, rgba(45, 212, 191, 0.18), transparent 28%),
+    radial-gradient(circle at 85% 78%, rgba(251, 191, 36, 0.13), transparent 26%),
+    linear-gradient(180deg, #fbfeff 0%, #f1fbff 44%, #fffaf0 100%);
+  color: #0f172a;
+}
+
+.radar-light section,
+.radar-light footer,
+.radar-light main {
+  background-color: transparent !important;
+}
+
+.radar-light [class*="bg-[#050816]"],
+.radar-light [class*="bg-[#070b1a]"],
+.radar-light [class*="bg-[#07111f]"],
+.radar-light [class*="bg-slate-950"],
+.radar-light [class*="bg-slate-900"],
+.radar-light [class*="bg-black"] {
+  background: rgba(255, 255, 255, 0.74) !important;
+}
+
+.radar-light header[class*="bg-[#050816]"] {
+  background: rgba(255, 255, 255, 0.82) !important;
+  box-shadow: 0 18px 60px rgba(15, 23, 42, 0.08);
+}
+
+.radar-light [class*="bg-white/["] {
+  background: rgba(255, 255, 255, 0.68) !important;
+}
+
+.radar-light [class*="border-white"],
+.radar-light [class*="border-cyan-200"] {
+  border-color: rgba(14, 116, 144, 0.16) !important;
+}
+
+.radar-light .text-white,
+.radar-light [class*="text-white"] {
+  color: #0f172a !important;
+}
+
+.radar-light .text-slate-300,
+.radar-light .text-slate-400,
+.radar-light .text-slate-500,
+.radar-light .text-slate-600,
+.radar-light [class*="text-slate-300"],
+.radar-light [class*="text-slate-400"],
+.radar-light [class*="text-slate-500"],
+.radar-light [class*="text-slate-600"] {
+  color: #475569 !important;
+}
+
+.radar-light .text-slate-900,
+.radar-light .text-slate-950,
+.radar-light [class*="text-slate-900"],
+.radar-light [class*="text-slate-950"] {
+  color: #0f172a !important;
+}
+
+.radar-light .text-cyan-50,
+.radar-light .text-cyan-100,
+.radar-light .text-cyan-200,
+.radar-light .text-teal-100,
+.radar-light .text-teal-200,
+.radar-light [class*="text-cyan-"],
+.radar-light [class*="text-teal-"] {
+  color: #0e7490 !important;
+}
+
+.radar-light [class*="shadow-[0_40px"],
+.radar-light [class*="shadow-[0_32px"],
+.radar-light [class*="shadow-[0_24px"] {
+  box-shadow: 0 30px 90px rgba(14, 116, 144, 0.14) !important;
+}
+
+.radar-light [class*="from-[#050816]"] {
+  --tw-gradient-from: rgba(248, 253, 255, 0.96) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgba(248, 253, 255, 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.radar-light .radar-code-console {
+  background: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  color: #cffafe !important;
+}
+
+.radar-light .radar-code-console [class*="text-cyan-"] {
+  color: #a5f3fc !important;
+}
+
+.radar-light .radar-code-console [class*="text-slate-"] {
+  color: #94a3b8 !important;
 }
 
 .map-grid {
@@ -51,6 +148,12 @@
     linear-gradient(rgba(14, 116, 144, 0.15) 1px, transparent 1px),
     linear-gradient(90deg, rgba(14, 116, 144, 0.15) 1px, transparent 1px);
   background-size: 28px 28px;
+}
+
+.radar-light .map-grid {
+  background-image:
+    linear-gradient(rgba(14, 116, 144, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 116, 144, 0.08) 1px, transparent 1px);
 }
 
 .text-balance {
