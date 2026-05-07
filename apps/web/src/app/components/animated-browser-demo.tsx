@@ -44,7 +44,7 @@ const agents = [
 
 export function AnimatedBrowserDemo() {
   return (
-    <div className="relative mx-auto w-full max-w-xl self-start lg:-mt-8 xl:-mt-12 2xl:max-w-2xl">
+    <div className="relative mx-auto mt-6 w-full max-w-xl self-start lg:mt-12 xl:mt-16 2xl:max-w-2xl">
       <motion.div
         className="absolute -left-6 top-12 hidden rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-cyan-100 shadow-[0_0_50px_rgba(34,211,238,0.18)] md:block"
         animate={{ y: [0, -16, 0], rotate: [-2, 2, -2] }}
