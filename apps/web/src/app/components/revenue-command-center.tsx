@@ -6,13 +6,13 @@ import { SectionReveal } from "@/app/components/section-reveal";
 const commandModules = [
   {
     icon: RadioTower,
-    title: "Search-demand radar",
-    copy: "Track live traveler intent, event compression, amenity demand, and search-to-booking gaps before they show up in stale market averages.",
+    title: "Market-demand radar",
+    copy: "See live rates, open dates, amenity positioning, event pressure, and demand gaps before they show up in stale market averages.",
   },
   {
     icon: Map,
-    title: "AI comp sets",
-    copy: "Build neighborhood, amenity, owner-acquisition, and multi-market comp groups from the actual listings guests compare against.",
+    title: "Real booking context",
+    copy: "Ground every market observation with booked nightly rates, occupancy, booking lead time, cancellations, channel mix, and revenue pace where available.",
   },
   {
     icon: SlidersHorizontal,
@@ -22,7 +22,7 @@ const commandModules = [
   {
     icon: FileChartColumn,
     title: "Owner-ready reporting",
-    copy: "Turn revenue, occupancy, ADR, RevPAR, pacing, and pickup into clean owner updates without exporting spreadsheet chaos.",
+    copy: "Turn revenue, occupancy, average nightly rate, revenue per night, pacing, and booking activity into clean owner updates without exporting spreadsheet chaos.",
   },
   {
     icon: BellRing,
@@ -31,23 +31,23 @@ const commandModules = [
   },
   {
     icon: Braces,
-    title: "APIs and data feeds",
-    copy: "Expose recommendations, comp context, booking scores, market reports, and audit trails to the tools your team already runs.",
+    title: "Connects to your tools",
+    copy: "Share recommendations, comparable rentals, booking signals, market reports, and change history with the systems your team already uses.",
   },
 ];
 
 const forecastRows = [
-  ["Jul pickup", "+18%", "Raise weekends"],
+  ["July bookings", "+18%", "Raise weekends"],
   ["Labor Day", "2.4x demand", "Hold rate floor"],
-  ["Ocean-view comps", "$412 ADR", "Push +9%"],
+  ["Ocean-view comps", "$412 avg.", "Push +9%"],
   ["Owner report", "Ready", "Send PDF"],
 ];
 
 const analytics = [
   ["Pacing", "84%", "ahead of budget"],
-  ["A/B test", "+6.8%", "min-stay lift"],
-  ["YOY RevPAR", "+14%", "same inventory"],
-  ["Low booking velocity", "3 units", "needs action"],
+  ["Rule test", "+6.8%", "min-stay lift"],
+  ["Revenue per night", "+14%", "same homes"],
+  ["Slow bookings", "3 homes", "needs action"],
 ];
 
 export function RevenueCommandCenter() {
@@ -61,7 +61,7 @@ export function RevenueCommandCenter() {
             Market, portfolio, and owner reporting in one live workspace.
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-300">
-            RentalRadar unifies market insights, comp sets, portfolio controls, performance analytics, and reporting in one AI command center powered by live browser evidence.
+            RentalRadar brings current market rates, real booking data, comparable rentals, portfolio controls, performance analytics, and owner-ready reporting into one place.
           </p>
         </SectionReveal>
 
@@ -78,7 +78,7 @@ export function RevenueCommandCenter() {
               <div className="border-b border-white/10 p-5">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div>
-                    <p className="text-sm text-slate-400">AI Revenue Command Center</p>
+                    <p className="text-sm text-slate-400">Revenue workspace</p>
                     <h3 className="mt-1 text-2xl font-semibold text-white">Kauai luxury homes</h3>
                   </div>
                   <div className="flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs text-emerald-100">
@@ -92,7 +92,7 @@ export function RevenueCommandCenter() {
                 <div className="border-b border-white/10 p-5 lg:border-b-0 lg:border-r">
                   <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-cyan-100">
                     <Blocks className="size-4" />
-                    Market moves to act on
+                    Rate opportunities to act on
                   </div>
                   <div className="space-y-3">
                     {forecastRows.map(([signal, value, action]) => (
@@ -110,7 +110,7 @@ export function RevenueCommandCenter() {
                 <div className="p-5">
                   <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-teal-100">
                     <BarChart3 className="size-4" />
-                    Performance and owner proof
+                    Booking performance and owner proof
                   </div>
                   <div className="grid gap-3">
                     {analytics.map(([label, value, note]) => (
@@ -130,7 +130,7 @@ export function RevenueCommandCenter() {
                 <div className="grid gap-3 text-sm text-slate-300 sm:grid-cols-3">
                   <div className="flex items-center gap-2">
                     <UsersRound className="size-4 text-emerald-200" />
-                    Team roles
+                    Live market checks
                   </div>
                   <div className="flex items-center gap-2">
                     <FileChartColumn className="size-4 text-cyan-200" />
@@ -138,7 +138,7 @@ export function RevenueCommandCenter() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Braces className="size-4 text-teal-200" />
-                    API-ready
+                    Tool connections
                   </div>
                 </div>
               </div>

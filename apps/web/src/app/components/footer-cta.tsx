@@ -16,10 +16,10 @@ export function FooterCta() {
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-100">Ready when you are</p>
               <h2 className="mt-4 max-w-3xl text-balance text-4xl font-semibold tracking-normal text-white sm:text-6xl">
-                Let AI agents price your first property free.
+                Price your first property free.
               </h2>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-                Create your account, then connect your first property from the dashboard.
+                See current market rates, real booking context, and clear rate recommendations before you publish a single price.
               </p>
             </div>
             <form action={getStartedHref} className="rounded-3xl border border-white/[0.12] bg-slate-950/[0.72] p-4">
@@ -44,7 +44,7 @@ export function FooterCta() {
                 </Button>
               </div>
               <p className="mt-3 px-2 text-xs leading-5 text-slate-500">
-                No credit card required for your free property. Browser extension features require user approval before applying rates.
+                No credit card required for your free property. Rate update tools require your approval before applying rates.
               </p>
             </form>
           </div>
@@ -54,7 +54,7 @@ export function FooterCta() {
             <BrandLogo markClassName="size-9" textClassName="[&>span:first-child]:text-sm [&>span:last-child]:text-[10px]" />
             <p>© 2026</p>
           </div>
-          <p>Real Chrome. Live data. Adaptive pricing.</p>
+          <p>Live market checks. Clear recommendations. Smarter rates.</p>
         </div>
       </div>
     </footer>

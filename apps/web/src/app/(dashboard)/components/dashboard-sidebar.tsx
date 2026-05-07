@@ -18,7 +18,7 @@ const nav = [
 ];
 
 export function DashboardSidebar() {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -74,7 +74,7 @@ export function DashboardSidebar() {
           {!collapsed ? (
             <div>
               <p className="text-sm font-medium text-slate-950">Waiting for first scan</p>
-              <p className="text-xs text-slate-500">No browser sessions yet</p>
+              <p className="text-xs text-slate-500">No live scans yet</p>
             </div>
           ) : null}
         </div>
@@ -90,7 +90,7 @@ export function DashboardSidebar() {
 }
 
 export function MobileDashboardNav() {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   return (
     <div className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-5 rounded-3xl border border-cyan-900/10 bg-white/90 p-2 shadow-[0_20px_70px_rgba(14,116,144,0.18)] backdrop-blur-xl lg:hidden">
       {nav.map((item) => {

@@ -11,15 +11,15 @@ export function ExtensionSpotlight() {
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/50 to-transparent" />
       <div className="container grid items-center gap-12 lg:grid-cols-[0.95fr_1fr]">
         <SectionReveal>
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-teal-200">Extension spotlight</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-teal-200">Rate update tools</p>
           <h2 className="mt-4 text-balance text-4xl font-semibold tracking-normal text-white sm:text-6xl">
-            Direct Rate Pushing, Even on Airbnb, VRBO & Booking.com
+            Update approved rates, even without a PMS.
           </h2>
           <p className="mt-6 text-lg leading-8 text-slate-300">
-            Chrome + Safari browser extension for direct rate pushing. No PMS required. Your real logged-in browser does the work, so RentalRadar can apply rates in the host dashboard you already use.
+            If your team is not connected to a property management system yet, RentalRadar can still help you apply approved rates in the host dashboards you already use.
           </p>
           <p className="mt-4 text-lg leading-8 text-cyan-100">
-            Mac users rejoice: native Safari support. Works on Airbnb, VRBO, and Booking.com host dashboards.
+            You stay in control: review the recommendation first, approve it, then apply the update when you are ready.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button asChild className="h-12 rounded-full bg-white px-6 text-slate-950 hover:bg-cyan-100">
@@ -52,9 +52,9 @@ export function ExtensionSpotlight() {
               <div className="flex items-center justify-between border-b border-white/10 pb-4">
                 <div>
                   <p className="text-sm text-slate-400">RentalRadar Extension</p>
-                  <p className="text-xl font-semibold text-white">3 optimized nights ready</p>
+                  <p className="text-xl font-semibold text-white">3 approved nights ready</p>
                 </div>
-                <span className="rounded-full bg-emerald-300/10 px-3 py-1 text-xs text-emerald-200">verified page</span>
+                <span className="rounded-full bg-emerald-300/10 px-3 py-1 text-xs text-emerald-200">ready to review</span>
               </div>
               <div className="mt-5 space-y-3">
                 {[
@@ -76,7 +76,7 @@ export function ExtensionSpotlight() {
             </div>
             <div className="mt-5 flex items-center gap-3 text-sm text-slate-300">
               <ShieldCheck className="size-5 text-teal-200" />
-              No credentials are stored in the extension. Auth uses your RentalRadar session.
+              RentalRadar never asks for or stores your channel passwords here. You approve every rate update.
             </div>
           </div>
         </SectionReveal>

@@ -1,25 +1,25 @@
-import { Bot, Chrome, Code2, MousePointerClick, Puzzle, Sparkles } from "lucide-react";
+import { Bot, CheckCircle2, Chrome, MousePointerClick, Puzzle, Sparkles } from "lucide-react";
 
 import { SectionReveal } from "@/app/components/section-reveal";
 
 const steps = [
   {
     icon: Bot,
-    title: "AI Agents Analyze & Train",
-    copy: "Site Analyzer reads the DOM, then Playwright Trainer generates resilient JavaScript and Python locator strategies.",
-    visual: ["const locator = ai.train(dom)", "await page.locator(priceCell)", "confidence: 0.94"],
+    title: "Set up the property",
+    copy: "Start with the property, strategy, and connected data sources. RentalRadar learns the home, the market, your pricing limits, and the owner goals.",
+    visual: ["Property strategy", "Owner guardrails", "Connected data"],
   },
   {
     icon: Chrome,
-    title: "Real Headed Chrome Scrapes Live",
-    copy: "RentalRadar sees the same live rates a traveler sees on Airbnb, VRBO, Booking.com, and public comp pages.",
-    visual: ["chrome.headed = true", "calendar.scan(365)", "freshness: live"],
+    title: "Check the live market",
+    copy: "RentalRadar reviews Airbnb, VRBO, Booking.com, and public comp pages the way a traveler would see them today.",
+    visual: ["Guest-visible rates", "Comp calendars", "Open nights"],
   },
   {
     icon: Puzzle,
-    title: "Auto-Push via Extension",
-    copy: "Chrome and Safari extensions can apply optimized rates directly on host dashboards when no PMS is connected.",
-    visual: ["extension.apply(rate)", "minStay.set(2)", "submit.naturalClick()"],
+    title: "Use real booking performance",
+    copy: "Current market rates are combined with booked rates, occupancy, lead time, pickup, revenue pace, and channel data so recommendations are financially grounded.",
+    visual: ["Booked rates", "Occupancy pace", "Ready to publish"],
   },
 ];
 
@@ -30,10 +30,10 @@ export function HowItWorks() {
         <SectionReveal className="mx-auto max-w-3xl text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">How it works</p>
           <h2 className="mt-4 text-balance text-4xl font-semibold tracking-normal text-white sm:text-5xl">
-            Adaptive AI scraping, then direct pricing execution.
+            Live market checks meet real booking performance.
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-300">
-            Static feeds and generic calendars can miss what travelers see today. RentalRadar trains agents against the page that exists right now.
+            Market feeds show part of the story. Your booking pace shows another. RentalRadar combines both: what guests can book right now and what properties are actually earning.
           </p>
         </SectionReveal>
 
@@ -51,7 +51,7 @@ export function HowItWorks() {
               <div className="mt-6 rounded-2xl border border-cyan-200/[0.12] bg-black/[0.35] p-4 font-mono text-xs text-cyan-100">
                 {step.visual.map((line) => (
                   <div key={line} className="flex items-center gap-2 py-1.5">
-                    {line.includes("submit") ? <MousePointerClick className="size-3 text-teal-200" /> : <Code2 className="size-3 text-cyan-200" />}
+                    {line.includes("publish") ? <MousePointerClick className="size-3 text-teal-200" /> : <CheckCircle2 className="size-3 text-cyan-200" />}
                     <span>{line}</span>
                   </div>
                 ))}
@@ -62,7 +62,7 @@ export function HowItWorks() {
 
         <div className="mt-8 flex items-center justify-center gap-2 text-sm text-cyan-100">
           <Sparkles className="size-4" />
-          Self-healing agents retrain locators when a marketplace changes layout.
+          If the market moves, RentalRadar can re-check the comps, compare them against booking performance, and explain the rate change.
         </div>
       </div>
     </section>

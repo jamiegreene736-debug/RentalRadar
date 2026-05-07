@@ -3,19 +3,20 @@ import { Check, Minus, X } from "lucide-react";
 import { SectionReveal } from "@/app/components/section-reveal";
 
 const rows = [
-  ["AI-driven dynamic pricing", "yes", "yes", "yes", "yes", "yes", "limited", "limited"],
-  ["Live OTA page evidence", "real Chrome", "market feeds", "market feeds", "market feeds", "market feeds", "Airbnb only", "market data"],
+  ["Smart price recommendations", "yes", "yes", "yes", "yes", "yes", "limited", "limited"],
+  ["Checks the rates guests can see online", "yes", "market feeds", "market feeds", "market feeds", "market feeds", "Airbnb only", "market data"],
+  ["Real booking and revenue signals", "yes", "yes", "yes", "yes", "yes", "limited", "market data"],
   ["Price limits and guardrails", "yes", "yes", "yes", "yes", "yes", "limited", "limited"],
   ["Custom strategy controls", "yes", "yes", "yes", "yes", "yes", "limited", "limited"],
   ["Discount, weekend, and seasonal rules", "yes", "yes", "yes", "yes", "yes", "limited", "limited"],
   ["Event and demand forecasting", "yes", "yes", "yes", "yes", "yes", "limited", "yes"],
   ["Minimum-stay and availability controls", "yes", "yes", "yes", "yes", "yes", "limited", "no"],
   ["Listing health and portfolio analytics", "yes", "yes", "yes", "limited", "limited", "no", "yes"],
-  ["Local market intelligence", "live comps", "yes", "yes", "yes", "yes", "Airbnb only", "yes"],
-  ["Comp-set management", "AI built", "yes", "yes", "limited", "limited", "no", "limited"],
+  ["Local market intelligence", "live comps + bookings", "yes", "yes", "yes", "yes", "Airbnb only", "yes"],
+  ["Comparable rental management", "suggested comps", "yes", "yes", "limited", "limited", "no", "limited"],
   ["Map and neighborhood analysis", "yes", "yes", "yes", "limited", "yes", "limited", "yes"],
-  ["Direct browser extension rate pushing", "yes", "no", "limited", "limited", "limited", "native only", "no"],
-  ["No-PMS execution path", "yes", "limited", "limited", "limited", "limited", "Airbnb only", "no"],
+  ["Can update rates without a PMS", "yes", "no", "limited", "limited", "limited", "native only", "no"],
+  ["Works even before a full PMS connection", "yes", "limited", "limited", "limited", "limited", "Airbnb only", "no"],
   ["Entry pricing model", "$3-$9", "varies", "varies", "varies", "varies", "included", "varies"],
 ];
 
@@ -28,10 +29,10 @@ export function EdgeComparison() {
         <SectionReveal className="mx-auto max-w-3xl text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">Feature comparison</p>
           <h2 className="mt-4 text-balance text-4xl font-semibold tracking-normal text-white sm:text-6xl">
-            See how RentalRadar stacks up across the pricing stack.
+            Compare the tools before you commit.
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-300">
-            A neutral feature matrix for operators comparing dynamic pricing tools, market intelligence, direct rate execution, and portfolio controls.
+            See how RentalRadar compares on rate recommendations, market visibility, portfolio controls, and ways to publish approved prices.
           </p>
         </SectionReveal>
 

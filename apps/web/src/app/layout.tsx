@@ -10,23 +10,23 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   metadataBase: new URL("https://rentalradar.ai"),
   title: {
-    default: "RentalRadar.ai | AI Agents for Live Vacation Rental Pricing",
+    default: "RentalRadar.ai | Vacation Rental Pricing That Follows the Market",
     template: "%s | RentalRadar.ai",
   },
   description:
-    "The next-generation AI dynamic pricing tool for vacation rentals. AI agents train Playwright in real headed Chrome to scrape live Airbnb, VRBO, Booking.com, and PMS market data.",
+    "RentalRadar helps property managers compare live vacation rental rates, understand local demand, and publish smarter nightly prices.",
   keywords: [
     "vacation rental dynamic pricing",
     "Airbnb pricing",
     "VRBO pricing",
-    "AI pricing tool",
-    "Playwright scraping",
-    "PMS revenue management",
+    "vacation rental pricing software",
+    "vacation rental revenue management",
+    "PMS pricing",
   ],
   openGraph: {
-    title: "RentalRadar.ai | AI Pricing Agents for Live Vacation Rental Revenue",
+    title: "RentalRadar.ai | Vacation Rental Pricing That Follows the Market",
     description:
-      "RentalRadar trains AI agents on live Airbnb, VRBO, and Booking.com pages, then auto-pushes smarter rates without relying on stale feeds.",
+      "RentalRadar checks live Airbnb, VRBO, and Booking.com rates, then helps property managers choose smarter nightly prices.",
     url: "https://rentalradar.ai",
     siteName: "RentalRadar.ai",
     images: [
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "RentalRadar AI agents training real headed Chrome for live vacation rental pricing",
+        alt: "RentalRadar vacation rental pricing dashboard with live market rate recommendations",
       },
     ],
     locale: "en_US",
@@ -42,9 +42,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "RentalRadar.ai | AI Agents for Live Vacation Rental Pricing",
+    title: "RentalRadar.ai | Vacation Rental Pricing That Follows the Market",
     description:
-      "Real headed Chrome. Adaptive AI scraping. Direct rate pushing with browser extensions.",
+      "Compare live market rates, review suggested prices, and publish approved updates.",
     images: ["/opengraph-image"],
   },
   alternates: {

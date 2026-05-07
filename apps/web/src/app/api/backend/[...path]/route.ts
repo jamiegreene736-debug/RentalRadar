@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { fetchBackend } from "@/lib/backend-api";
 
+export const dynamic = "force-dynamic";
+
 type RouteContext = {
   params: Promise<{
     path?: string[];

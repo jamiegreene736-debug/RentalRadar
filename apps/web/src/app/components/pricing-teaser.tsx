@@ -31,8 +31,8 @@ const tiers = [
 
 const proofPoints = [
   "Flat fee per property with no revenue-share surprise",
-  "Live comp evidence attached to every recommendation",
-  "Browser extension rate pushes included on Pro",
+  "Live market checks and real booking data included",
+  "Approved rate updates included on Pro",
 ];
 
 export function PricingTeaser() {

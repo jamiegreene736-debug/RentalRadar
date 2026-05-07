@@ -4,17 +4,17 @@ import type { LucideIcon } from "lucide-react";
 import { SectionReveal } from "@/app/components/section-reveal";
 
 const proofStats = [
-  ["120+", "pricing signals", "market, listing, booking, event, and amenity factors"],
+  ["Live", "market checks", "current channel rates plus booking, occupancy, and revenue data"],
   ["365", "daily rate decisions", "a full-year calendar view with fresh recommendations"],
-  ["24/7", "market monitoring", "traveler demand, comp movement, and availability changes"],
-  ["20+", "local comp checks", "neighborhood listings reviewed for each pricing pass"],
+  ["24/7", "market monitoring", "traveler demand, comp movement, booking pace, and availability changes"],
+  ["Real", "booking context", "booked nightly rates, occupancy, lead time, booking pace, gaps, and owner targets"],
 ];
 
 const strategyModes = [
   {
     icon: TrendingUp,
     title: "Revenue push",
-    copy: "Raise rates when compression, events, and booking pace support a stronger ADR target.",
+    copy: "Raise rates when demand, events, and booking pace support a stronger nightly rate.",
   },
   {
     icon: Gauge,
@@ -46,7 +46,7 @@ const parameterChips = [
 const healthRows = [
   ["Listing health", "98", "pricing, availability, and conversion signals"],
   ["52-week view", "365", "daily rates, minimum stays, and seasonal limits"],
-  ["Chart lenses", "6", "revenue, occupancy, ADR, lead time, pickup, and pace"],
+  ["Chart lenses", "6", "revenue, occupancy, average rate, lead time, pickup, and pace"],
 ];
 
 export function ForecastIntelligence() {
@@ -55,12 +55,12 @@ export function ForecastIntelligence() {
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/55 to-transparent" />
       <div className="container">
         <SectionReveal className="mx-auto max-w-3xl text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">Forecast intelligence</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">Pricing intelligence</p>
           <h2 className="mt-4 text-balance text-4xl font-semibold tracking-normal text-white sm:text-6xl">
             Every recommendation explains the market behind the rate.
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-300">
-            RentalRadar turns live browser evidence into strategy choices, annual forecasts, and owner-ready performance signals before a price ever gets pushed.
+            RentalRadar turns current market activity and real booking data into recommendations you can explain to yourself, your team, and your owners.
           </p>
         </SectionReveal>
 
@@ -101,7 +101,7 @@ export function ForecastIntelligence() {
                   </div>
                   <div>
                     <p className="text-sm text-slate-400">Local signal map</p>
-                    <h3 className="text-2xl font-semibold text-white">Signals the forecast weighs</h3>
+                    <h3 className="text-2xl font-semibold text-white">Signals behind each recommendation</h3>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -134,7 +134,7 @@ export function ForecastIntelligence() {
 
             <div className="mt-6 flex flex-wrap items-center gap-3 rounded-3xl border border-amber-200/[0.16] bg-amber-200/[0.07] px-5 py-4 text-sm text-amber-50">
               <CalendarDays className="size-5 text-amber-200" />
-              Seasonal rules, weekend adjustments, gap-night discounts, and price limits stay visible before rates are applied.
+              Market rates, booking pace, seasonal rules, weekend adjustments, gap-night discounts, and price limits stay visible before rates are applied.
             </div>
           </SectionReveal>
         </div>

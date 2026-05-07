@@ -1,19 +1,19 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Bot, Chrome, Code2, Compass, MousePointer2, Radar } from "lucide-react";
+import { Bot, CheckCircle2, Chrome, Compass, MousePointer2, Radar } from "lucide-react";
 
-const locatorLines = [
-  "agent.scan('calendar-grid')",
-  "trainer.patch(locator.priceCell)",
-  "chrome.headed(true)",
-  "push.rate('$286', minStay=2)",
+const checklist = [
+  "Check guest-visible rates",
+  "Compare nearby calendars",
+  "Review booking pace",
+  "Explain the price move",
 ];
 
 const rateRows = [
-  ["Airbnb", "$286", "+12%"],
-  ["VRBO", "$274", "+8%"],
-  ["Booking", "$301", "+15%"],
+  ["Airbnb comp", "$286", "+12%"],
+  ["Booked rate signal", "$274", "+8%"],
+  ["Occupancy pace", "$301", "+15%"],
 ];
 
 export function AnimatedBrowserDemo() {
@@ -48,7 +48,7 @@ export function AnimatedBrowserDemo() {
           </div>
           <div className="flex items-center gap-2 rounded-full border border-cyan-900/10 bg-cyan-50 px-4 py-2 text-xs text-slate-600">
             <Chrome className="size-4 text-cyan-700" />
-            Real headed Chrome session
+            Live market check
           </div>
           <Compass className="size-5 text-slate-500" />
         </div>
@@ -59,9 +59,9 @@ export function AnimatedBrowserDemo() {
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold text-slate-950">Host Calendar</p>
-                  <p className="text-xs text-slate-400">Airbnb.com hosting/pricing</p>
+                  <p className="text-xs text-slate-400">Rates and open nights</p>
                 </div>
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700">live DOM</span>
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700">live</span>
               </div>
               <div className="grid grid-cols-7 gap-2">
                 {Array.from({ length: 28 }).map((_, index) => (
@@ -92,11 +92,11 @@ export function AnimatedBrowserDemo() {
 
           <div className="p-5">
             <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-cyan-800">
-              <Code2 className="size-4" />
-              AI locator training
+              <CheckCircle2 className="size-4" />
+              What RentalRadar is checking
             </div>
-            <div className="radar-code-console space-y-3 rounded-2xl border border-slate-950/10 bg-slate-950 p-4 font-mono text-xs text-cyan-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-              {locatorLines.map((line, index) => (
+            <div className="space-y-3 rounded-2xl border border-slate-950/10 bg-slate-950 p-4 text-xs text-cyan-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+              {checklist.map((line, index) => (
                 <motion.div
                   key={line}
                   className="flex items-center gap-3"
@@ -104,7 +104,9 @@ export function AnimatedBrowserDemo() {
                   animate={{ opacity: [0.35, 1, 0.35] }}
                   transition={{ duration: 2.2, delay: index * 0.28, repeat: Infinity }}
                 >
-                  <span className="text-slate-500">0{index + 1}</span>
+                  <span className="grid size-5 place-items-center rounded-full bg-cyan-300/15 text-[10px] text-cyan-100">
+                    {index + 1}
+                  </span>
                   <span>{line}</span>
                 </motion.div>
               ))}

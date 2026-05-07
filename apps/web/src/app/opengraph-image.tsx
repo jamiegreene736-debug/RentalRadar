@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "RentalRadar.ai AI dynamic pricing agents";
+export const alt = "RentalRadar.ai vacation rental pricing dashboard";
 export const size = {
   width: 1200,
   height: 630,
@@ -36,18 +36,18 @@ export default function Image() {
           />
           <div style={{ fontSize: 34, fontWeight: 700 }}>RentalRadar.ai</div>
         </div>
-        <div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ fontSize: 78, lineHeight: 0.96, fontWeight: 800, maxWidth: 920 }}>
-            AI Pricing Agents for Live Vacation Rental Revenue
+            Next-Generation Vacation Rental Pricing
           </div>
           <div style={{ marginTop: 28, fontSize: 30, color: "#a7f3ff", maxWidth: 940 }}>
-            Live marketplace pages, self-training AI, and direct rate pushes instead of stale feeds.
+            Compare live market rates, protect peak nights, and publish approved pricing updates.
           </div>
         </div>
         <div style={{ display: "flex", gap: 16, fontSize: 24, color: "#d7fbff" }}>
-          <span>Real Chrome</span>
+          <span>Live market checks</span>
           <span>•</span>
-          <span>Adaptive AI scraping</span>
+          <span>Real booking data</span>
           <span>•</span>
           <span>$3-$9/property</span>
         </div>
