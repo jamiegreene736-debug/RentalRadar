@@ -20,8 +20,8 @@ export function SiteHeader() {
           <a href="#extensions" className="transition hover:text-cyan-200">
             Extensions
           </a>
-          <a href="#forecast-intelligence" className="transition hover:text-cyan-200">
-            Features
+          <a href="#comparison" className="transition hover:text-cyan-200">
+            Compare
           </a>
           <a href="#pricing" className="transition hover:text-cyan-200">
             Pricing
