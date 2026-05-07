@@ -4,7 +4,6 @@ import { useState } from "react";
 import { CalendarClock, CheckCircle2, Chrome, Table2 } from "lucide-react";
 
 import { marketPulse, recommendations, scrapedRows } from "@/app/(dashboard)/components/dashboard-data";
-import { ExtensionPushButton } from "@/app/(dashboard)/components/push-extension-button";
 import { cn } from "@/lib/utils";
 import {
   CartesianGrid,
@@ -56,6 +55,10 @@ export function PropertyTabs() {
 }
 
 function MarketRatesPanel() {
+  if (marketPulse.length === 0 && scrapedRows.length === 0) {
+    return <EmptyPanel title="No market rates yet" copy="Market observations will appear here after the first live scan finishes." />;
+  }
+
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
       <div className="h-[320px] rounded-3xl border border-white/10 bg-slate-950/60 p-4">
@@ -85,6 +88,10 @@ function MarketRatesPanel() {
 }
 
 function RecommendationsPanel() {
+  if (recommendations.length === 0) {
+    return <EmptyPanel title="No recommendations yet" copy="AI pricing recommendations will appear after real market rates are available." />;
+  }
+
   return (
     <div className="space-y-3">
       {recommendations.map((row) => (
@@ -104,38 +111,13 @@ function RecommendationsPanel() {
 
 function CalendarSyncPanel() {
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      {["Airbnb extension", "Guesty API", "Booking.com PMS"].map((item, index) => (
-        <div key={item} className="rounded-3xl border border-white/10 bg-slate-950/55 p-5">
-          <p className="text-lg font-semibold text-white">{item}</p>
-          <p className="mt-2 text-sm text-slate-400">{index === 0 ? "Connected via Chrome extension" : "Two-way sync enabled"}</p>
-          <div className="mt-5 h-2 rounded-full bg-white/10">
-            <div className="h-2 rounded-full bg-cyan-300" style={{ width: `${92 - index * 12}%` }} />
-          </div>
-        </div>
-      ))}
-    </div>
+    <EmptyPanel title="No calendar sync yet" copy="Connect a PMS or browser extension after adding a real property." />
   );
 }
 
 function ExtensionPanel() {
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-      <div className="rounded-3xl border border-white/10 bg-slate-950/55 p-5">
-        <p className="text-xl font-semibold text-white">Chrome extension online</p>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
-          Connected to Airbnb via Extension. RentalRadar can hand off approved rates to the user’s real logged-in browser session.
-        </p>
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          {["Airbnb ✓", "VRBO ✓", "Booking.com ready"].map((item) => (
-            <span key={item} className="rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-100">
-              {item}
-            </span>
-          ))}
-        </div>
-      </div>
-      <ExtensionPushButton />
-    </div>
+    <EmptyPanel title="No extension connection yet" copy="Install and connect an extension after a property exists." />
   );
 }
 
@@ -156,6 +138,15 @@ function DataTable({ rows }: { rows: typeof scrapedRows }) {
           <span className="text-slate-400">{row.available}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+function EmptyPanel({ title, copy }: { title: string; copy: string }) {
+  return (
+    <div className="rounded-3xl border border-cyan-900/10 bg-white/72 p-6">
+      <p className="text-lg font-semibold text-slate-950">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{copy}</p>
     </div>
   );
 }

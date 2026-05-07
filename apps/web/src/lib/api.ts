@@ -1,6 +1,5 @@
 import "server-only";
 
-import { demoMarketRates, demoProperty } from "@/lib/demo-data";
 import {
   BillingSessionResponse,
   ErrorDashboardResponse,
@@ -65,13 +64,18 @@ export async function createProperty(payload: {
   });
 }
 
-export async function getMarketRates(propertyId = demoProperty.id): Promise<MarketRatesResponse> {
+export async function getMarketRates(propertyId: string): Promise<MarketRatesResponse> {
   try {
     return await apiFetch<MarketRatesResponse>(`/properties/${propertyId}/market-rates`, {
       next: { revalidate: 45 },
     });
   } catch {
-    return demoMarketRates;
+    return {
+      property_id: propertyId,
+      cached: false,
+      observations: [],
+      recommendations: [],
+    };
   }
 }
 

@@ -1,11 +1,10 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useState } from "react";
 import { AlertTriangle, Eye, EyeOff, KeyRound, LockKeyhole, RadioTower, ShieldAlert, Trash2 } from "lucide-react";
 
 import {
   connectDirectOtaAction,
-  pushDirectPricingAction,
   revokeDirectOtaAction,
   submitDirectOta2faAction,
 } from "@/app/actions";
@@ -39,21 +38,8 @@ export function DirectOtaAutomationCard({
   const [showPassword, setShowPassword] = useState(false);
   const [connectState, connectAction] = useActionState(connectDirectOtaAction, initialState);
   const [twoFaState, twoFaAction] = useActionState(submitDirectOta2faAction, initialState);
-  const [pushState, pushAction] = useActionState(pushDirectPricingAction, initialState);
   const [revokeState, revokeAction] = useActionState(revokeDirectOtaAction, initialState);
   const latest = credentials[0];
-  const sampleRates = useMemo(
-    () =>
-      Array.from({ length: 7 }, (_, index) => {
-        const date = new Date();
-        date.setDate(date.getDate() + index + 1);
-        return {
-          stay_date: date.toISOString().slice(0, 10),
-          rate_cents: 28900 + index * 400,
-        };
-      }),
-    [],
-  );
 
   return (
     <section className="overflow-hidden rounded-[2rem] border border-red-300/25 bg-red-950/20 shadow-[0_0_60px_rgba(248,113,113,0.14)]">
@@ -196,20 +182,12 @@ export function DirectOtaAutomationCard({
               <p className={twoFaState.ok ? "mt-3 text-sm text-emerald-200" : "mt-3 text-sm text-red-200"}>{twoFaState.message}</p>
             ) : null}
           </form>
-
-          <form action={pushAction} className="rounded-3xl border border-white/10 bg-slate-950/60 p-5">
-            <input type="hidden" name="propertyId" value={propertyId} />
-            <input type="hidden" name="rates" value={JSON.stringify(sampleRates)} />
-            <label className="flex gap-3 text-sm leading-6 text-red-100">
-              <input name="consentAccepted" type="checkbox" className="mt-1 size-4 accent-red-400" required />I accept the high-risk direct push warning for this manual run.
-            </label>
-            <SubmitButton className="mt-4 h-11 rounded-full bg-white text-slate-950 hover:bg-slate-200">
-              Push sample rates in headed Chrome
-            </SubmitButton>
-            {pushState.message ? (
-              <p className={pushState.ok ? "mt-3 text-sm text-emerald-200" : "mt-3 text-sm text-red-200"}>{pushState.message}</p>
-            ) : null}
-          </form>
+          <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-5">
+            <p className="font-semibold text-white">Rate pushes wait for real recommendations</p>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              This panel will only show rates after a property scan creates approved recommendations for this property.
+            </p>
+          </div>
         </div>
       </div>
     </section>

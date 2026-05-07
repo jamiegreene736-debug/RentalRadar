@@ -55,11 +55,11 @@ export function PmsConnectPanel() {
           </div>
           <div className="grid gap-2">
             <Label htmlFor="displayName">Display Name</Label>
-            <Input id="displayName" name="displayName" defaultValue="Hostaway Production" />
+            <Input id="displayName" name="displayName" placeholder="Your PMS account name" />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="accountRef">Account Ref</Label>
-            <Input id="accountRef" name="accountRef" defaultValue="rr-demo-account" />
+            <Input id="accountRef" name="accountRef" placeholder="Optional account identifier" />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="apiKey">Official API Key / Access Token</Label>

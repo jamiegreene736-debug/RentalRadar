@@ -8,7 +8,21 @@ import { agentEvents } from "@/app/(dashboard)/components/dashboard-data";
 import { cn } from "@/lib/utils";
 
 export function AgentLogTimeline() {
-  const [open, setOpen] = useState<string>(agentEvents[0].title);
+  const [open, setOpen] = useState<string>(agentEvents[0]?.title ?? "");
+
+  if (agentEvents.length === 0) {
+    return (
+      <div className="rounded-[28px] border border-cyan-900/10 bg-white/78 p-6 shadow-[0_24px_90px_rgba(14,116,144,0.13)]">
+        <span className="grid size-12 place-items-center rounded-2xl bg-cyan-100 text-cyan-800">
+          <Bot className="size-6" />
+        </span>
+        <h2 className="mt-4 text-xl font-semibold text-slate-950">No agent activity yet</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Locator training, browser validation, and pricing events will appear here after your first property scan starts.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

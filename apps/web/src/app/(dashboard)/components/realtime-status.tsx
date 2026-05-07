@@ -16,7 +16,7 @@ export function RealtimeStatus() {
   }, []);
 
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-3 py-1.5 text-xs text-cyan-100">
+    <div className="inline-flex items-center gap-2 rounded-full border border-cyan-900/10 bg-cyan-50 px-3 py-1.5 text-xs text-cyan-800">
       <Wifi className="size-3.5" />
       Realtime {state}
     </div>
