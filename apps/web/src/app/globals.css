@@ -90,9 +90,11 @@
 }
 
 .radar-light .text-slate-300,
+.radar-light .text-slate-200,
 .radar-light .text-slate-400,
 .radar-light .text-slate-500,
 .radar-light .text-slate-600,
+.radar-light [class*="text-slate-200"],
 .radar-light [class*="text-slate-300"],
 .radar-light [class*="text-slate-400"],
 .radar-light [class*="text-slate-500"],
