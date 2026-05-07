@@ -56,7 +56,7 @@ export default function DashboardOverviewPage() {
           <PanelTitle
             eyebrow="What happens next"
             title="A real dashboard appears after your first scan"
-            copy="RentalRadar will use the property address and any competitor links you provide to queue market research. Empty states stay empty until that real data exists."
+            copy="RentalRadar will use the property address and any market comp links you provide to queue market research. Empty states stay empty until that real data exists."
           />
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
             {setupSteps.map((step) => (

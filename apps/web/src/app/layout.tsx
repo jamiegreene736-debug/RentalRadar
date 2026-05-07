@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     "PMS revenue management",
   ],
   openGraph: {
-    title: "RentalRadar.ai | AI Pricing Agents Built to Beat Beyond Pricing",
+    title: "RentalRadar.ai | AI Pricing Agents for Live Vacation Rental Revenue",
     description:
       "RentalRadar trains AI agents on live Airbnb, VRBO, and Booking.com pages, then auto-pushes smarter rates without relying on stale feeds.",
     url: "https://rentalradar.ai",

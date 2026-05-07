@@ -110,8 +110,8 @@ def build_rate_forecast(
         confidence=confidence,
         explanation=(
             "Forecast blends live scrape recommendations when available with address-specific seasonality, "
-            "day-of-week demand, comp-rate movement, and occupancy pacing. Beyond Pricing comparison is a "
-            "Beyond-style benchmark, not a connected Beyond Pricing account pull."
+            "day-of-week demand, comp-rate movement, and occupancy pacing. The comparison line is a "
+            "market benchmark, not a third-party account pull."
         ),
         monthly=monthly,
         nights=nights,

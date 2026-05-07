@@ -38,7 +38,7 @@ export default function Image() {
         </div>
         <div>
           <div style={{ fontSize: 78, lineHeight: 0.96, fontWeight: 800, maxWidth: 920 }}>
-            AI Pricing Agents Built to Beat Beyond Pricing
+            AI Pricing Agents for Live Vacation Rental Revenue
           </div>
           <div style={{ marginTop: 28, fontSize: 30, color: "#a7f3ff", maxWidth: 940 }}>
             Live marketplace pages, self-training AI, and direct rate pushes instead of stale feeds.

@@ -33,7 +33,7 @@ export function HowItWorks() {
             Adaptive AI scraping, then direct pricing execution.
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-300">
-            Beyond Pricing and Wheelhouse rely on slower feeds. RentalRadar trains agents against the page that exists right now.
+            Static feeds and generic calendars can miss what travelers see today. RentalRadar trains agents against the page that exists right now.
           </p>
         </SectionReveal>
 

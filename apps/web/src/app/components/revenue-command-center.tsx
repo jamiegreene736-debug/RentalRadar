@@ -56,12 +56,12 @@ export function RevenueCommandCenter() {
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/45 to-transparent" />
       <div className="container">
         <SectionReveal className="mx-auto max-w-3xl text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-emerald-200">Missing from basic pricing tools</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-emerald-200">Complete revenue command center</p>
           <h2 className="mt-4 text-balance text-4xl font-semibold tracking-normal text-white sm:text-6xl">
-            The market, portfolio, and owner-reporting layer competitors make you stitch together.
+            Market, portfolio, and owner reporting in one live workspace.
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-300">
-            Beyond Pricing and Wheelhouse showcase market insights, comp sets, portfolio controls, performance analytics, and reporting. RentalRadar brings those sections into one AI command center powered by live browser evidence.
+            RentalRadar unifies market insights, comp sets, portfolio controls, performance analytics, and reporting in one AI command center powered by live browser evidence.
           </p>
         </SectionReveal>
 

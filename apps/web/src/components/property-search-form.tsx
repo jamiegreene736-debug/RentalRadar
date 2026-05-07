@@ -161,7 +161,7 @@ export function PropertySearchForm() {
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="compUrls">Known competitor URLs</Label>
+            <Label htmlFor="compUrls">Known market comp URLs</Label>
             <Textarea
               id="compUrls"
               name="compUrls"

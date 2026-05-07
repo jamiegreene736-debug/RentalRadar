@@ -8,12 +8,12 @@ export function CompetitiveInsight({ recommendation }: { recommendation?: Pricin
   return (
     <div className="grid gap-3 lg:grid-cols-3">
       <div className="rounded-lg border bg-card p-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Beyond-style</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Calendar benchmark</p>
         <p className="mt-3 text-2xl font-semibold">{money(logic?.beyond_style_calendar_rate_cents)}</p>
         <p className="mt-1 text-sm text-muted-foreground">Calendar curve benchmark</p>
       </div>
       <div className="rounded-lg border bg-card p-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Wheelhouse-style</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Comp benchmark</p>
         <p className="mt-3 text-2xl font-semibold">{money(logic?.wheelhouse_style_comp_rate_cents)}</p>
         <p className="mt-1 text-sm text-muted-foreground">Comp median benchmark</p>
       </div>

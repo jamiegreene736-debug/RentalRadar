@@ -17,7 +17,7 @@ export function HeroSection() {
             AI Agents that train Playwright in real headed Chrome
           </div>
           <h1 className="max-w-5xl text-balance text-5xl font-semibold leading-[0.95] tracking-normal text-white sm:text-6xl lg:text-7xl xl:text-8xl">
-            AI Pricing Agents Built to Beat Beyond Pricing
+            AI Pricing Agents for Live Vacation Rental Revenue
           </h1>
           <p className="mt-7 max-w-3xl text-pretty text-lg leading-8 text-slate-300 sm:text-xl">
             Instead of relying on stale feeds and generic calendars, RentalRadar trains AI agents on live Airbnb, VRBO,

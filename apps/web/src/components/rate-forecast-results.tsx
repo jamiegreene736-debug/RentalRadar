@@ -107,7 +107,7 @@ export function RateForecastResults({ propertyId }: { propertyId?: string }) {
         <>
           <div className="mt-6 grid gap-3 md:grid-cols-4">
             <Metric icon={CircleDollarSign} label="RentalRadar revenue" value={money(forecast.recommended_total_revenue_cents)} />
-            <Metric icon={TrendingUp} label="Lift vs Beyond-style" value={money(forecast.extra_income_vs_beyond_cents)} />
+            <Metric icon={TrendingUp} label="Projected lift" value={money(forecast.extra_income_vs_beyond_cents)} />
             <Metric icon={Percent} label="Estimated occupancy" value={percent(forecast.estimated_occupancy)} />
             <Metric icon={CalendarRange} label="Average nightly rate" value={money(averageRate)} />
           </div>
@@ -119,7 +119,7 @@ export function RateForecastResults({ propertyId }: { propertyId?: string }) {
                   <BarChart3 className="size-4 text-cyan-200" />
                   <p className="text-sm font-semibold">Monthly revenue outlook</p>
                 </div>
-                <p className="text-xs text-slate-400">RentalRadar vs Beyond-style benchmark</p>
+                <p className="text-xs text-slate-400">RentalRadar against market benchmark</p>
               </div>
               <div className="space-y-3">
                 {monthly.map((month) => (
@@ -150,7 +150,7 @@ export function RateForecastResults({ propertyId }: { propertyId?: string }) {
                 <span>Date</span>
                 <span>Rate</span>
                 <span>Occ.</span>
-                <span>Beyond</span>
+                <span>Market</span>
               </div>
               {firstNights.map((night) => (
                 <div key={night.stay_date} className="grid grid-cols-4 border-b border-cyan-900/5 px-4 py-3 text-sm last:border-b-0">
