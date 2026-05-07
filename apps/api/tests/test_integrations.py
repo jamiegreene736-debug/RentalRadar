@@ -28,6 +28,7 @@ def test_credentials_are_encrypted_and_round_trip() -> None:
     )
 
     assert fingerprint
+    assert list(encrypted) == ["payload"]
     assert "secret-token" not in str(encrypted)
 
     connection = PmsConnection(

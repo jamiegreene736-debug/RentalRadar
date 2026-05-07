@@ -26,21 +26,26 @@ class CredentialVault:
         self.cipher = cipher or TokenCipher()
 
     def pack(self, provider: PmsProvider, values: dict[str, Any]) -> tuple[dict[str, str], str]:
-        encrypted: dict[str, str] = {}
+        secret_values: dict[str, str] = {}
         fingerprint_source: dict[str, str] = {}
         for field in SECRET_FIELDS:
             value = values.get(field)
             if value:
-                encrypted[field] = self.cipher.encrypt(str(value)) or ""
+                secret_values[field] = str(value)
                 fingerprint_source[field] = hashlib.sha256(str(value).encode()).hexdigest()
         fingerprint = hashlib.sha256(
             json.dumps({"provider": provider.value, "fields": fingerprint_source}, sort_keys=True).encode()
         ).hexdigest()
-        return encrypted, fingerprint
+        if not secret_values:
+            return {}, fingerprint
+        return {"payload": self.cipher.encrypt_credentials(secret_values)}, fingerprint
 
     def unpack(self, connection: PmsConnection) -> ConnectorCredentials:
         payload = connection.credentials_encrypted or {}
-        decrypted = {key: self.cipher.decrypt(value) for key, value in payload.items()}
+        if "payload" in payload:
+            decrypted = self.cipher.decrypt_credentials(payload["payload"])
+        else:
+            decrypted = {key: self.cipher.decrypt(value) for key, value in payload.items()}
         return ConnectorCredentials(
             provider=connection.provider,
             access_token=decrypted.get("access_token") or self.cipher.decrypt(connection.access_token_encrypted),
