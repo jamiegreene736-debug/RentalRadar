@@ -14,17 +14,17 @@ export function HeroSection() {
         <div className="max-w-4xl">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-200/[0.08] px-4 py-2 text-sm text-cyan-100 shadow-[0_0_44px_rgba(34,211,238,0.14)]">
             <span className="size-2 rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.9)]" />
-            Live rate checks plus real booking data
+            Headed Chrome AI agents + real booking data
           </div>
           <h1 className="max-w-5xl text-balance text-5xl font-semibold leading-[0.95] tracking-normal text-white sm:text-6xl lg:text-7xl xl:text-8xl">
             The Next Generation of Vacation Rental Pricing Is Here
           </h1>
           <p className="mt-7 max-w-3xl text-pretty text-lg leading-8 text-slate-300 sm:text-xl">
-            RentalRadar compares nearby rentals, current channel rates, occupancy, and booking pace so you can price each
-            night with confidence. See what guests can book now, grounded by what properties are actually earning.
+            RentalRadar combines AI agents running Playwright in real headed Chrome with booking pace, occupancy, PMS,
+            and revenue signals. See what guests see right now, grounded by what properties are really booking for.
           </p>
           <div className="mt-6 grid max-w-3xl gap-3 sm:grid-cols-3">
-            {["Guest-visible rates", "Nearby rental comps", "Real booking performance"].map((signal) => (
+            {["Playwright + headed Chrome", "Live OTA comp evidence", "Real booking performance"].map((signal) => (
               <div key={signal} className="rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-sm font-medium text-cyan-50">
                 {signal}
               </div>
@@ -49,7 +49,7 @@ export function HeroSection() {
             </Button>
           </div>
           <div className="mt-9 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-sm text-slate-300 backdrop-blur">
-            <span className="text-white">Everything in one place:</span> market rates, booking pace, occupancy, and revenue strategy for clearer pricing decisions.
+            <span className="text-white">The ultimate combination:</span> live browser evidence, PMS/channel data, booking pace, occupancy, and revenue strategy in one AI pricing engine.
           </div>
         </div>
         <AnimatedBrowserDemo />

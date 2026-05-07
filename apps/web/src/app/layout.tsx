@@ -10,23 +10,24 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   metadataBase: new URL("https://rentalradar.ai"),
   title: {
-    default: "RentalRadar.ai | Vacation Rental Pricing That Follows the Market",
+    default: "RentalRadar.ai | AI Agents for Next-Generation Vacation Rental Pricing",
     template: "%s | RentalRadar.ai",
   },
   description:
-    "RentalRadar helps property managers compare live vacation rental rates, understand local demand, and publish smarter nightly prices.",
+    "RentalRadar combines Playwright AI agents running real headed Chrome with booking, pacing, occupancy, and PMS revenue data for next-generation vacation rental pricing.",
   keywords: [
     "vacation rental dynamic pricing",
     "Airbnb pricing",
     "VRBO pricing",
-    "vacation rental pricing software",
+    "Playwright pricing agents",
+    "headed Chrome scraping",
     "vacation rental revenue management",
     "PMS pricing",
   ],
   openGraph: {
-    title: "RentalRadar.ai | Vacation Rental Pricing That Follows the Market",
+    title: "RentalRadar.ai | AI Agents for Next-Generation Vacation Rental Pricing",
     description:
-      "RentalRadar checks live Airbnb, VRBO, and Booking.com rates, then helps property managers choose smarter nightly prices.",
+      "RentalRadar combines AI agents running Playwright in real headed Chrome with real booking and revenue data for next-generation vacation rental pricing.",
     url: "https://rentalradar.ai",
     siteName: "RentalRadar.ai",
     images: [
@@ -34,7 +35,7 @@ export const metadata: Metadata = {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "RentalRadar vacation rental pricing dashboard with live market rate recommendations",
+        alt: "RentalRadar AI agents using headed Chrome and booking data for vacation rental pricing",
       },
     ],
     locale: "en_US",
@@ -42,9 +43,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "RentalRadar.ai | Vacation Rental Pricing That Follows the Market",
+    title: "RentalRadar.ai | AI Agents for Next-Generation Vacation Rental Pricing",
     description:
-      "Compare live market rates, review suggested prices, and publish approved updates.",
+      "Playwright AI agents, real headed Chrome, live market evidence, and actual booking data in one pricing engine.",
     images: ["/opengraph-image"],
   },
   alternates: {

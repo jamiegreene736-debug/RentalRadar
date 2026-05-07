@@ -54,7 +54,7 @@ export function FooterCta() {
             <BrandLogo markClassName="h-9 w-14" textClassName="text-sm [&>span]:text-sm" />
             <p>© 2026</p>
           </div>
-          <p>Live market checks. Clear recommendations. Smarter rates.</p>
+          <p>Playwright agents. Real Chrome. Real booking data.</p>
         </div>
       </div>
     </footer>

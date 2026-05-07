@@ -4,7 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import { SectionReveal } from "@/app/components/section-reveal";
 
 const proofStats = [
-  ["Live", "market checks", "current channel rates plus booking, occupancy, and revenue data"],
+  ["Hybrid", "pricing engine", "headed-browser evidence plus booking, PMS, channel, and revenue data"],
   ["365", "daily rate decisions", "a full-year calendar view with fresh recommendations"],
   ["24/7", "market monitoring", "traveler demand, comp movement, booking pace, and availability changes"],
   ["Real", "booking context", "booked nightly rates, occupancy, lead time, booking pace, gaps, and owner targets"],
@@ -55,12 +55,12 @@ export function ForecastIntelligence() {
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/55 to-transparent" />
       <div className="container">
         <SectionReveal className="mx-auto max-w-3xl text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">Pricing intelligence</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">Hybrid pricing intelligence</p>
           <h2 className="mt-4 text-balance text-4xl font-semibold tracking-normal text-white sm:text-6xl">
-            Every recommendation explains the market behind the rate.
+            The price is not guessed. It is witnessed, measured, and explained.
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-300">
-            RentalRadar turns current market activity and real booking data into recommendations you can explain to yourself, your team, and your owners.
+            Playwright agents capture live traveler-facing market evidence while booking data anchors the model in reality. Every recommendation can show both the market move and the booking signal behind it.
           </p>
         </SectionReveal>
 

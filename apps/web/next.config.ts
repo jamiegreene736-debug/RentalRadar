@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import { existsSync } from "node:fs";
 import path from "node:path";
 
 type WebpackAssetSource = {
@@ -40,9 +39,7 @@ type WebpackConfig = {
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(process.cwd(), "../.."),
   webpack(config: WebpackConfig, { isServer, webpack }: { isServer: boolean; webpack: WebpackRuntime }) {
-    const hasPagesRouter = existsSync(path.join(process.cwd(), "src/pages")) || existsSync(path.join(process.cwd(), "pages"));
-
-    if (isServer && hasPagesRouter) {
+    if (isServer) {
       config.plugins = config.plugins ?? [];
       const ensurePagesManifestPlugin: WebpackPlugin = {
         apply(compiler) {
