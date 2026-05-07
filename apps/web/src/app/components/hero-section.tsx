@@ -4,8 +4,7 @@ import { ArrowRight, PlayCircle } from "lucide-react";
 import { AnimatedBrowserDemo } from "@/app/components/animated-browser-demo";
 import { DataStreamBackground } from "@/app/components/data-stream-background";
 import { Button } from "@/components/ui/button";
-
-const signUpHref = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL ?? "/sign-up";
+import { getStartedHref } from "@/lib/site-config";
 
 export function HeroSection() {
   return (
@@ -26,7 +25,7 @@ export function HeroSection() {
           </p>
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <Button asChild className="h-14 rounded-full bg-cyan-300 px-8 text-base text-slate-950 hover:bg-cyan-200">
-              <Link href={signUpHref}>
+              <Link href={getStartedHref}>
                 Get Started Free
                 <ArrowRight />
               </Link>

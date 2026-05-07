@@ -3,8 +3,7 @@ import { ArrowRight, Mail } from "lucide-react";
 import { SectionReveal } from "@/app/components/section-reveal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-const clerkSignUpUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL ?? "/sign-up";
+import { getStartedHref, hasClerkSignUp } from "@/lib/site-config";
 
 export function FooterCta() {
   return (
@@ -19,10 +18,12 @@ export function FooterCta() {
                 Let AI agents price your first property free.
               </h2>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-                Enter your email and RentalRadar will start a Clerk magic-link sign-up flow.
+                {hasClerkSignUp
+                  ? "Enter your email and RentalRadar will start a Clerk magic-link sign-up flow."
+                  : "Jump into the live dashboard and connect your first property when you are ready."}
               </p>
             </div>
-            <form action={clerkSignUpUrl} className="rounded-3xl border border-white/[0.12] bg-slate-950/[0.72] p-4">
+            <form action={getStartedHref} className="rounded-3xl border border-white/[0.12] bg-slate-950/[0.72] p-4">
               <label htmlFor="email" className="sr-only">
                 Email address
               </label>
@@ -39,7 +40,7 @@ export function FooterCta() {
                   />
                 </div>
                 <Button type="submit" className="h-14 rounded-full bg-cyan-300 px-7 text-slate-950 hover:bg-cyan-200">
-                  Get magic link
+                  {hasClerkSignUp ? "Get magic link" : "Open dashboard"}
                   <ArrowRight />
                 </Button>
               </div>

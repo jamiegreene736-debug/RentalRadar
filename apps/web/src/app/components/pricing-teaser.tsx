@@ -3,8 +3,7 @@ import { ArrowRight, Cpu, Zap } from "lucide-react";
 
 import { SectionReveal } from "@/app/components/section-reveal";
 import { Button } from "@/components/ui/button";
-
-const signUpHref = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL ?? "/sign-up";
+import { getStartedHref } from "@/lib/site-config";
 
 const tiers = [
   ["Starter", "$3", "Daily scans", "Rate intelligence"],
@@ -54,7 +53,7 @@ export function PricingTeaser() {
 
         <div className="mt-10 flex justify-center">
           <Button asChild className="h-14 rounded-full bg-cyan-300 px-8 text-base text-slate-950 hover:bg-cyan-200">
-            <Link href={signUpHref}>
+            <Link href={getStartedHref}>
               Start with 1 free property
               <ArrowRight />
             </Link>

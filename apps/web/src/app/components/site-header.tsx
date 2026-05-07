@@ -2,8 +2,7 @@ import Link from "next/link";
 import { Activity, ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-
-const signUpHref = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL ?? "/sign-up";
+import { getStartedHref } from "@/lib/site-config";
 
 export function SiteHeader() {
   return (
@@ -30,7 +29,7 @@ export function SiteHeader() {
           </a>
         </nav>
         <Button asChild className="h-10 rounded-full bg-cyan-300 px-5 text-slate-950 hover:bg-cyan-200">
-          <Link href={signUpHref}>
+          <Link href={getStartedHref}>
             Get Started
             <ArrowRight />
           </Link>
