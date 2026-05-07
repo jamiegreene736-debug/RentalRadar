@@ -6,7 +6,7 @@ export function BrandMark({ className, title = "RentalRadar.AI" }: SVGProps<SVGS
   return (
     <svg
       className={cn("shrink-0", className)}
-      viewBox="0 0 84 56"
+      viewBox="0 0 64 56"
       role="img"
       aria-label={title}
       xmlns="http://www.w3.org/2000/svg"
@@ -50,8 +50,8 @@ export function BrandMark({ className, title = "RentalRadar.AI" }: SVGProps<SVGS
           <feBlend in="SourceGraphic" mode="screen" />
         </filter>
       </defs>
-      <rect width="84" height="56" rx="16" fill="url(#brand-mark-shell)" />
-      <rect x="1" y="1" width="82" height="54" rx="15" fill="none" stroke="#67E8F9" strokeOpacity="0.22" />
+      <rect width="64" height="56" rx="16" fill="url(#brand-mark-shell)" />
+      <rect x="1" y="1" width="62" height="54" rx="15" fill="none" stroke="#67E8F9" strokeOpacity="0.22" />
       <circle cx="31" cy="29" r="23" fill="url(#brand-mark-radar)" />
       <circle cx="31" cy="29" r="22" fill="none" stroke="#67E8F9" strokeOpacity="0.22" strokeWidth="1.8" />
       <circle cx="31" cy="29" r="15.5" fill="none" stroke="#67E8F9" strokeOpacity="0.2" strokeWidth="1.4" />
@@ -76,7 +76,7 @@ type BrandLogoProps = HTMLAttributes<HTMLDivElement> & {
 export function BrandLogo({ className, markClassName, showText = true, textClassName, ...props }: BrandLogoProps) {
   return (
     <div className={cn("flex items-center gap-3", className)} {...props}>
-      <BrandMark className={cn("h-10 w-14", markClassName)} />
+      <BrandMark className={cn("h-10 w-[46px]", markClassName)} />
       {showText ? (
         <span className={cn("min-w-0 whitespace-nowrap leading-none", textClassName)}>
           <span className="text-base font-semibold tracking-normal text-white">RentalRadar</span>
