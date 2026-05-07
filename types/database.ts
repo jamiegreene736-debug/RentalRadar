@@ -45,6 +45,8 @@ export type PmsConnectionStatus = "connected" | "needs_reauth" | "disabled" | "r
 export type PmsProvider =
   | "guesty"
   | "hostaway"
+  | "streamline"
+  | "ciirus"
   | "ownerrez"
   | "lodgify"
   | "hostfully"

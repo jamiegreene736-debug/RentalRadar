@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import PmsConnection, PmsConnectionStatus, Property, PropertyPmsMapping
+from app.db.models import PmsConnection, PmsConnectionStatus, PmsProvider, Property, PropertyPmsMapping
 from app.db.session import get_db
 from app.deps import RequestContext, get_request_context
 from app.integrations.types import ChannelRateUpdate
@@ -17,10 +18,13 @@ from app.schemas import (
     PmsSyncResponse,
     PropertyPmsMappingRequest,
     PropertyPmsMappingResponse,
+    PublicListingBaselineRequest,
+    PublicListingBaselineResponse,
 )
 from app.services.credentials import CredentialVault
 from app.services.pms import PmsConnectorRegistry
 from app.services.usage import UsageLimitExceeded, require_usage_allowance
+from app.workers.tasks import pull_rates_from_pms, run_scrape_job
 
 router = APIRouter(tags=["pms"])
 
@@ -32,6 +36,11 @@ def connect_pms(
     context: RequestContext = Depends(get_request_context),
 ) -> PmsConnectResponse:
     registry = PmsConnectorRegistry()
+    if payload.username or payload.password:
+        raise HTTPException(
+            status_code=400,
+            detail="RentalRadar never stores PMS passwords. Use official API keys, OAuth tokens, or partner credentials.",
+        )
 
     access_token = payload.access_token or payload.api_key
     refresh_token = payload.refresh_token
@@ -45,25 +54,26 @@ def connect_pms(
         )
 
     if not access_token:
-        if not payload.username or not payload.password:
-            raise HTTPException(
-                status_code=400,
-                detail="Provide api_key, access_token, oauth_code, or username/password for PMS connection",
-            )
+        raise HTTPException(
+            status_code=400,
+            detail="Provide api_key, access_token, or oauth_code for PMS connection",
+        )
+
+    credential_payload = {
+        "api_key": payload.api_key,
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "client_id": payload.client_id,
+        "client_secret": payload.client_secret,
+        "webhook_secret": payload.webhook_secret,
+    }
+    safe_meta = safe_metadata(payload.metadata)
+    validation = registry.test_connection(payload.provider, credential_payload, safe_meta).response
 
     vault = CredentialVault()
     credentials_encrypted, fingerprint = vault.pack(
         payload.provider,
-        {
-            "api_key": payload.api_key,
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "username": payload.username,
-            "password": payload.password,
-            "client_id": payload.client_id,
-            "client_secret": payload.client_secret,
-            "webhook_secret": payload.webhook_secret,
-        },
+        credential_payload,
     )
 
     if not credentials_encrypted:
@@ -86,7 +96,10 @@ def connect_pms(
         token_cipher="fernet:sha256-env-key",
         scopes=payload.scopes,
         last_verified_at=datetime.now(timezone.utc),
-        metadata_=safe_metadata(payload.metadata),
+        metadata_=safe_meta | {
+            "legal_notice": "We never store PMS passwords; only official API keys, OAuth tokens, and webhook secrets.",
+            "validation": validation,
+        },
     )
     db.add(connection)
     db.commit()
@@ -98,6 +111,7 @@ def connect_pms(
         account_ref=connection.account_ref,
         status=connection.status.value,
         credential_fingerprint=connection.credential_fingerprint,
+        validation=validation,
     )
 
 
@@ -197,6 +211,78 @@ def sync_pms(
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/pms/fallback/public-listing-scan", response_model=PublicListingBaselineResponse, status_code=202)
+def public_listing_baseline_scan(
+    payload: PublicListingBaselineRequest,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> PublicListingBaselineResponse:
+    _get_property(db, payload.property_id, context.organization_id)
+    try:
+        require_usage_allowance(
+            db,
+            context.organization_id,
+            "scrape_job",
+            property_id=payload.property_id,
+            units=len(payload.public_listing_urls) * 25,
+            source="public_listing_baseline",
+        )
+        job_ids = PmsConnectorRegistry().queue_public_listing_baseline(
+            db,
+            context.organization_id,
+            payload.property_id,
+            [str(url) for url in payload.public_listing_urls],
+        )
+    except (UsageLimitExceeded, Exception) as exc:
+        status_code = 429 if isinstance(exc, UsageLimitExceeded) else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    for job_id in job_ids:
+        run_scrape_job.delay(str(job_id))
+    return PublicListingBaselineResponse(
+        queued_job_ids=job_ids,
+        legal_notice=(
+            "Fallback scans use headed Chrome only for public Airbnb/VRBO listing pages supplied by the user. "
+            "Official PMS APIs remain the source of truth whenever connected."
+        ),
+    )
+
+
+@router.post("/webhooks/pms/{provider}/{connection_id}")
+async def pms_webhook(
+    provider: str,
+    connection_id: UUID,
+    request: Request,
+    x_pms_signature: str | None = Header(default=None, alias="X-PMS-Signature"),
+    x_rentalradar_webhook_secret: str | None = Header(default=None, alias="X-RentalRadar-Webhook-Secret"),
+    db: Session = Depends(get_db),
+) -> dict:
+    raw_body = await request.body()
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Webhook payload must be JSON") from exc
+    try:
+        result = PmsConnectorRegistry().handle_webhook(
+            db,
+            connection_id,
+            PmsProvider(provider),
+            payload,
+            raw_body,
+            x_pms_signature,
+            x_rentalradar_webhook_secret,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if result.get("should_refresh") and result.get("property_id"):
+        pull_rates_from_pms.delay(
+            str(connection_id),
+            result["property_id"],
+            date.today().isoformat(),
+            (date.today() + timedelta(days=365)).isoformat(),
+        )
+    return result
 
 
 def _get_property(db: Session, property_id, organization_id) -> Property:

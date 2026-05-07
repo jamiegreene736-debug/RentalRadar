@@ -10,8 +10,10 @@ from app.integrations.providers import (
     GuestyConnector,
     HostawayConnector,
     HostfullyConnector,
+    CiirusConnector,
     LodgifyConnector,
     OwnerRezConnector,
+    StreamlineConnector,
     VrboPartnerConnector,
 )
 from app.integrations.types import ConnectorCredentials
@@ -22,6 +24,8 @@ class ChannelConnectorRegistry:
         self._connectors: dict[PmsProvider, type[BaseChannelConnector]] = {
             PmsProvider.guesty: GuestyConnector,
             PmsProvider.hostaway: HostawayConnector,
+            PmsProvider.streamline: StreamlineConnector,
+            PmsProvider.ciirus: CiirusConnector,
             PmsProvider.lodgify: LodgifyConnector,
             PmsProvider.ownerrez: OwnerRezConnector,
             PmsProvider.hostfully: HostfullyConnector,

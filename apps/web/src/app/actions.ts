@@ -44,7 +44,13 @@ export async function connectPmsAction(_: ActionState, formData: FormData): Prom
       display_name: formData.get("displayName"),
       account_ref: formData.get("accountRef"),
       api_key: formData.get("apiKey"),
+      client_secret: formData.get("apiSecret") || undefined,
+      webhook_secret: formData.get("webhookSecret") || undefined,
       scopes: ["rates:write", "availability:read"],
+      metadata: {
+        base_url: formData.get("baseUrl") || undefined,
+        validation_path: formData.get("validationPath") || undefined,
+      },
     });
     revalidatePath("/");
     return { ok: true, message: "PMS connection saved." };

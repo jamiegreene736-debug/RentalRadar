@@ -36,6 +36,19 @@ class JsonCalendarConnector(BaseChannelConnector):
             headers["Authorization"] = f"Bearer {token}"
         return IntegrationHttpClient(self.metadata.get("base_url", self.base_url), headers=headers)
 
+    def test_connection(self) -> ConnectorResult:
+        validation_path = self.metadata.get("validation_path") or self.metadata.get("listings_path") or "/listings"
+        payload = self._client().request("GET", validation_path, params=self.metadata.get("validation_params") or {})
+        return ConnectorResult(
+            provider=self.provider,
+            status="succeeded",
+            response={
+                "mode": "official_api_validation",
+                "validation_path": validation_path,
+                "sample_keys": sorted(payload.keys())[:8] if isinstance(payload, dict) else [],
+            },
+        )
+
     def pull_rates(
         self,
         property_ref: ChannelPropertyRef,
@@ -97,6 +110,51 @@ class HostawayConnector(JsonCalendarConnector):
         pull_reservations=True,
         supports_playwright_fallback=True,
     )
+
+
+class StreamlineConnector(JsonCalendarConnector):
+    provider = PmsProvider.streamline
+    base_url = "https://api.streamlinevrs.com"
+    auth_style = "x-api-key"
+    rates_path_template = "/api/json/calendar/{property_id}"
+    push_path_template = "/api/json/rates/{property_id}"
+    capabilities = ProviderCapabilities(
+        pull_rates=True,
+        push_rates=True,
+        pull_reservations=True,
+        supports_playwright_fallback=False,
+    )
+
+    def test_connection(self) -> ConnectorResult:
+        validation_path = self.metadata.get("validation_path") or "/api/json/properties"
+        payload = self._client().request("GET", validation_path, params=self.metadata.get("validation_params") or {})
+        return ConnectorResult(
+            provider=self.provider,
+            status="succeeded",
+            response={"mode": "official_api_validation", "validation_path": validation_path, "sample": _sample_payload(payload)},
+        )
+
+
+class CiirusConnector(JsonCalendarConnector):
+    provider = PmsProvider.ciirus
+    base_url = "https://api.ciirus.com"
+    rates_path_template = "/v1/properties/{property_id}/calendar"
+    push_path_template = "/v1/properties/{property_id}/rates"
+    capabilities = ProviderCapabilities(
+        pull_rates=True,
+        push_rates=True,
+        pull_reservations=True,
+        supports_playwright_fallback=False,
+    )
+
+    def _client(self) -> IntegrationHttpClient:
+        token = self.credentials.access_token or self.credentials.api_key
+        if not token:
+            raise CredentialError("CiiRUS requires an official API key or bearer token")
+        return IntegrationHttpClient(
+            self.metadata.get("base_url", self.base_url),
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        )
 
 
 class LodgifyConnector(JsonCalendarConnector):
@@ -300,6 +358,14 @@ def normalize_rate_payload(payload: dict) -> list[ChannelRate]:
             )
         )
     return rates
+
+
+def _sample_payload(payload: object) -> dict:
+    if isinstance(payload, dict):
+        return {"keys": sorted(payload.keys())[:8]}
+    if isinstance(payload, list):
+        return {"items": len(payload)}
+    return {"type": type(payload).__name__}
 
 
 def rate_update_payload(update: ChannelRateUpdate) -> dict:

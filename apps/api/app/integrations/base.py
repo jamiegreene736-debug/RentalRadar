@@ -50,3 +50,10 @@ class BaseChannelConnector(ABC):
             status="skipped",
             skipped_reason="reservation pull not implemented for this connector yet",
         )
+
+    def test_connection(self) -> ConnectorResult:
+        return ConnectorResult(
+            provider=self.provider,
+            status="succeeded",
+            response={"mode": "connector_default_validation"},
+        )

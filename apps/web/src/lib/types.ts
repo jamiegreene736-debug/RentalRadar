@@ -64,7 +64,19 @@ export type MarketRatesResponse = {
   recommendations: PricingRecommendation[];
 };
 
-export type PmsProvider = "guesty" | "hostaway" | "ownerrez" | "lodgify" | "hostfully" | "airbnb" | "vrbo" | "booking" | "direct" | "other";
+export type PmsProvider =
+  | "guesty"
+  | "hostaway"
+  | "streamline"
+  | "ciirus"
+  | "ownerrez"
+  | "lodgify"
+  | "hostfully"
+  | "airbnb"
+  | "vrbo"
+  | "booking"
+  | "direct"
+  | "other";
 
 export type ActionState = {
   ok: boolean;

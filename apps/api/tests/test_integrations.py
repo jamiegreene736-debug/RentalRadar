@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 
 from app.db.models import PmsConnection, PmsConnectionStatus, PmsProvider
+from app.integrations.registry import ChannelConnectorRegistry
 from app.integrations.providers import AirbnbPartnerConnector, normalize_rate_payload
 from app.integrations.types import (
     ChannelPropertyRef,
@@ -77,3 +78,13 @@ def test_ota_direct_connector_requires_partner_endpoint() -> None:
             date(2026, 6, 1),
             date(2026, 6, 2),
         )
+
+
+def test_new_pms_connectors_are_registered() -> None:
+    registry = ChannelConnectorRegistry()
+    for provider in (PmsProvider.hostaway, PmsProvider.streamline, PmsProvider.ciirus):
+        connector = registry.connector_for(
+            ConnectorCredentials(provider=provider, api_key="official-api-key"),
+            metadata={"base_url": "https://example.invalid", "validation_path": "/health"},
+        )
+        assert connector.provider == provider

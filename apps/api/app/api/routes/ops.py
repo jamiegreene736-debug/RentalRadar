@@ -137,10 +137,11 @@ def scraping_legal_notice() -> ScrapingLegalNoticeResponse:
             "This notice is product guidance, not legal advice."
         ),
         commitments=[
+            "Prefer official PMS APIs for connected user-owned properties; use headed Playwright only for public market comp research or user-supplied public listing baselines.",
+            "Never store PMS passwords; store only official API keys, OAuth tokens, API secrets, and webhook secrets encrypted at rest.",
             "Respect applicable site terms, robots directives where applicable, and user account permissions.",
             "Do not bypass paywalls, access controls, CAPTCHAs, or authentication barriers.",
             "Use proxies, retries, and rate limits to improve reliability and reduce service impact.",
-            "Prefer official PMS and channel-manager APIs whenever they are available.",
         ],
         user_responsibilities=[
             "Connect only accounts and listings you are authorized to manage.",

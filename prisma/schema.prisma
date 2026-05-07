@@ -95,6 +95,8 @@ enum PmsConnectionStatus {
 enum PmsProvider {
   guesty
   hostaway
+  streamline
+  ciirus
   ownerrez
   lodgify
   hostfully

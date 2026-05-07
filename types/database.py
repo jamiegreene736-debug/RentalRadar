@@ -88,6 +88,8 @@ class PmsConnectionStatus(str, Enum):
 class PmsProvider(str, Enum):
     guesty = "guesty"
     hostaway = "hostaway"
+    streamline = "streamline"
+    ciirus = "ciirus"
     ownerrez = "ownerrez"
     lodgify = "lodgify"
     hostfully = "hostfully"

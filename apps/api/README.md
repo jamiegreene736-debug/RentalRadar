@@ -67,20 +67,25 @@ Supported adapter paths:
 
 - Guesty Open API
 - Hostaway Public API
+- Streamline Open API
+- CiiRUS API
 - Lodgify API-compatible calendar endpoints
 - OwnerRez API-compatible availability/rate endpoints
 - Hostfully API-compatible calendar endpoints
 - Booking.com Connectivity API for certified partners
 - Airbnb/VRBO partner API endpoints when certified channel-manager access exists
-- Adaptive Playwright fallback for authorized direct PMS websites
 
-Credentials are stored through `CredentialVault`, encrypted before entering `pms_connections.credentials_encrypted`. Do not put secrets in `metadata`; the connect route strips common secret keys.
+Core rule: official APIs are used for connected user-owned properties. Adaptive headed Playwright is reserved for public market comp research and user-supplied public Airbnb/VRBO listing baselines when no PMS is connected.
+
+Credentials are stored through `CredentialVault`, encrypted before entering `pms_connections.credentials_encrypted`. RentalRadar never stores PMS passwords; it stores only official API keys, OAuth tokens, API secrets, and webhook secrets. Do not put secrets in `metadata`; the connect route strips common secret keys.
 
 Useful endpoints:
 
 - `POST /pms/connect`
 - `POST /pms/map-property`
 - `POST /pms/sync`
+- `POST /webhooks/pms/{provider}/{connection_id}`
+- `POST /pms/fallback/public-listing-scan`
 - `POST /pricing/push`
 
 Celery jobs:

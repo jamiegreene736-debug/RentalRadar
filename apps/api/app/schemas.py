@@ -98,6 +98,8 @@ class PmsConnectResponse(BaseModel):
     account_ref: str | None
     status: str
     credential_fingerprint: str | None = None
+    validation: dict[str, Any] = Field(default_factory=dict)
+    credential_rotation_required: bool = False
 
 
 class PropertyPmsMappingRequest(BaseModel):
@@ -130,6 +132,16 @@ class PmsSyncResponse(BaseModel):
     pushed_count: int = 0
     fallback_used: bool = False
     detail: dict[str, Any] = Field(default_factory=dict)
+
+
+class PublicListingBaselineRequest(BaseModel):
+    property_id: UUID
+    public_listing_urls: list[HttpUrl] = Field(min_length=1, max_length=10)
+
+
+class PublicListingBaselineResponse(BaseModel):
+    queued_job_ids: list[UUID]
+    legal_notice: str
 
 
 class PricingPushItem(BaseModel):
