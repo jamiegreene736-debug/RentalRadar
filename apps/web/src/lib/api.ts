@@ -9,10 +9,7 @@ import {
   ScrapingLegalNoticeResponse,
   UsageSummaryResponse,
 } from "@/lib/types";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-const ORG_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "00000000-0000-0000-0000-000000000001";
-const USER_ID = process.env.NEXT_PUBLIC_USER_ID ?? "00000000-0000-0000-0000-000000000002";
+import { fetchBackend, ORG_ID, USER_ID } from "@/lib/backend-api";
 
 type ApiOptions = RequestInit & {
   json?: unknown;
@@ -22,20 +19,7 @@ type ApiOptions = RequestInit & {
 };
 
 async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
-  const headers = new Headers(options.headers);
-  headers.set("Accept", "application/json");
-  headers.set("X-Organization-Id", ORG_ID);
-  headers.set("X-User-Id", USER_ID);
-  if (options.json !== undefined) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-    body: options.json !== undefined ? JSON.stringify(options.json) : options.body,
-    cache: options.cache ?? (options.next ? undefined : "no-store"),
-  });
+  const response = await fetchBackend(path, options);
 
   if (!response.ok) {
     const text = await response.text();

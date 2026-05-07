@@ -6,7 +6,6 @@ import { AlertTriangle, CheckCircle2, Chrome, Circle, LoaderCircle, RefreshCw, T
 import { ScrapeSession, ScrapeSessionsResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const ORG_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "00000000-0000-0000-0000-000000000001";
 const USER_ID = process.env.NEXT_PUBLIC_USER_ID ?? "00000000-0000-0000-0000-000000000002";
 
@@ -33,7 +32,7 @@ export function LiveScrapeScreens({ propertyId, pending = false }: { propertyId?
     async function loadSessions() {
       try {
         setStatus((current) => (current === "live" ? "live" : "loading"));
-        const response = await fetch(`${API_BASE_URL}/properties/${propertyId}/scrape-sessions`, {
+        const response = await fetch(`/api/backend/properties/${propertyId}/scrape-sessions`, {
           headers: {
             Accept: "application/json",
             "X-Organization-Id": ORG_ID,
