@@ -8,10 +8,13 @@ from playwright.async_api import BrowserContext, Page
 
 @dataclass(frozen=True)
 class FingerprintProfile:
-    user_agent: str
+    user_agent: str = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
+    )
     locale: str = "en-US"
     timezone_id: str = "America/New_York"
-    viewport: dict[str, int] = field(default_factory=lambda: {"width": 1365, "height": 768})
+    viewport: dict[str, int] = field(default_factory=lambda: {"width": 1920, "height": 1080})
     hardware_concurrency: int = 8
     device_memory: int = 8
     languages: tuple[str, ...] = ("en-US", "en")
@@ -21,9 +24,9 @@ class FingerprintProfile:
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
 ]
 
 
@@ -32,10 +35,10 @@ def random_fingerprint() -> FingerprintProfile:
         user_agent=random.choice(USER_AGENTS),
         viewport=random.choice(
             [
-                {"width": 1365, "height": 768},
+                {"width": 1920, "height": 1080},
+                {"width": 1680, "height": 1050},
                 {"width": 1440, "height": 900},
                 {"width": 1536, "height": 864},
-                {"width": 1600, "height": 900},
             ]
         ),
         hardware_concurrency=random.choice([4, 6, 8, 10, 12]),
@@ -119,10 +122,14 @@ async def apply_stealth_patches(context: BrowserContext, profile: FingerprintPro
           window.chrome = window.chrome || {};
           window.chrome.runtime = window.chrome.runtime || {};
           window.chrome.app = window.chrome.app || { isInstalled: false };
+          defineGetter(navigator, 'webdriver', undefined);
+
           defineGetter(Navigator.prototype, 'plugins', [
-            { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
-            { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
-            { name: 'Native Client', filename: 'internal-nacl-plugin' }
+            { 0: {}, name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', length: 1 },
+            { 0: {}, name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', length: 1 },
+            { 0: {}, name: 'Native Client', filename: 'internal-nacl-plugin', length: 1 },
+            { 0: {}, name: 'Microsoft Edge PDF Viewer', filename: 'internal-pdf-viewer', length: 1 },
+            { 0: {}, name: 'WebKit built-in PDF', filename: 'internal-pdf-viewer', length: 1 }
           ]);
           defineGetter(Navigator.prototype, 'languages', languages);
           defineGetter(Navigator.prototype, 'language', languages[0]);
@@ -154,8 +161,8 @@ async def apply_stealth_patches(context: BrowserContext, profile: FingerprintPro
 
 async def humanize_page(page: Page) -> None:
     # 7. Human-like mouse movement, scrolling, and typing delays support.
-    await page.mouse.move(random.randint(80, 220), random.randint(80, 220), steps=random.randint(8, 18))
-    await page.wait_for_timeout(random.randint(250, 900))
+    await page.mouse.move(random.randint(100, 800), random.randint(100, 600), steps=50)
+    await page.wait_for_timeout(random.randint(300, 1200))
 
 
 async def human_scroll(page: Page, min_scrolls: int = 2, max_scrolls: int = 6) -> None:

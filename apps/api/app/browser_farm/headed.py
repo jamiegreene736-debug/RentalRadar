@@ -42,6 +42,8 @@ async def launch_headed_browser(
     *,
     job_id: str,
     proxy: ProxyLease | None = None,
+    proxy_url: str | None = None,
+    user_agent: str | None = None,
     storage_state: dict | None = None,
 ) -> AsyncIterator[HeadedBrowserSession]:
     """Launch real headed Google Chrome/Chromium inside Xvfb.
@@ -63,11 +65,29 @@ async def launch_headed_browser(
     user_data_dir = tempfile.mkdtemp(prefix=f"rr-browser-{job_id}-")
     action_logger = BrowserActionLogger(job_id)
     profile = random_fingerprint()
+    if user_agent:
+        profile = type(profile)(
+            user_agent=user_agent,
+            locale=profile.locale,
+            timezone_id=profile.timezone_id,
+            viewport=profile.viewport,
+            hardware_concurrency=profile.hardware_concurrency,
+            device_memory=profile.device_memory,
+            languages=profile.languages,
+            webgl_vendor=profile.webgl_vendor,
+            webgl_renderer=profile.webgl_renderer,
+        )
+    proxy = proxy or (ProxyLease(server=proxy_url) if proxy_url else None)
 
     try:
         launch_args = [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
             "--disable-blink-features=AutomationControlled",
             "--disable-dev-shm-usage",
+            "--disable-extensions",
+            "--start-maximized",
+            "--disable-infobars",
             "--disable-features=IsolateOrigins,site-per-process",
             "--no-first-run",
             "--no-default-browser-check",
@@ -79,6 +99,7 @@ async def launch_headed_browser(
             "headless": False,
             "channel": "chrome",
             "args": launch_args,
+            "ignore_default_args": ["--enable-automation"],
             "timeout": 90_000,
         }
         if proxy:
