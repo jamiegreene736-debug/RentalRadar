@@ -39,12 +39,12 @@ export function FooterCta() {
                   />
                 </div>
                 <Button type="submit" className="h-14 rounded-full bg-cyan-300 px-7 text-slate-950 hover:bg-cyan-200">
-                  Create account
+                  Start free
                   <ArrowRight />
                 </Button>
               </div>
               <p className="mt-3 px-2 text-xs leading-5 text-slate-500">
-                No credit card for the free property. Browser extension features require user approval before applying rates.
+                No credit card required for your free property. Browser extension features require user approval before applying rates.
               </p>
             </form>
           </div>

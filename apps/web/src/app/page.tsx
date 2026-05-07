@@ -1,6 +1,7 @@
 import { EdgeComparison } from "@/app/components/edge-comparison";
 import { ExtensionSpotlight } from "@/app/components/extension-spotlight";
 import { FooterCta } from "@/app/components/footer-cta";
+import { ForecastIntelligence } from "@/app/components/forecast-intelligence";
 import { HeroSection } from "@/app/components/hero-section";
 import { HowItWorks } from "@/app/components/how-it-works";
 import { PricingTeaser } from "@/app/components/pricing-teaser";
@@ -13,6 +14,7 @@ export default function HomePage() {
       <SiteHeader />
       <HeroSection />
       <HowItWorks />
+      <ForecastIntelligence />
       <RevenueCommandCenter />
       <ExtensionSpotlight />
       <EdgeComparison />

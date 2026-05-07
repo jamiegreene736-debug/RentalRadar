@@ -20,8 +20,8 @@ export function SiteHeader() {
           <a href="#extensions" className="transition hover:text-cyan-200">
             Extensions
           </a>
-          <a href="#comparison" className="transition hover:text-cyan-200">
-            Compare
+          <a href="#forecast-intelligence" className="transition hover:text-cyan-200">
+            Features
           </a>
           <a href="#pricing" className="transition hover:text-cyan-200">
             Pricing
@@ -36,7 +36,7 @@ export function SiteHeader() {
           </Button>
           <Button asChild className="h-10 rounded-full bg-cyan-300 px-5 text-slate-950 hover:bg-cyan-200">
             <Link href={getStartedHref}>
-              Get Started
+              Start Free
               <ArrowRight />
             </Link>
           </Button>

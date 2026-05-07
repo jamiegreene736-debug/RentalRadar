@@ -26,7 +26,7 @@ export function HeroSection() {
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <Button asChild className="h-14 rounded-full bg-cyan-300 px-8 text-base text-slate-950 hover:bg-cyan-200">
               <Link href={getStartedHref}>
-                Get Started Free
+                Start Free - No Credit Card
                 <ArrowRight />
               </Link>
             </Button>
@@ -42,7 +42,7 @@ export function HeroSection() {
             </Button>
           </div>
           <div className="mt-9 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-sm text-slate-300 backdrop-blur">
-            <span className="text-white">Works with</span> Airbnb • VRBO • Booking.com • Hostaway • Streamline • CiiRUS + 20 more
+            <span className="text-white">Free first property.</span> No credit card required. Works with Airbnb • VRBO • Booking.com • Hostaway • Streamline • CiiRUS + 20 more
           </div>
         </div>
         <AnimatedBrowserDemo />
