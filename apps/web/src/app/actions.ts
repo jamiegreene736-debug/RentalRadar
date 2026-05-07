@@ -3,7 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { connectPms, createBillingCheckout, createProperty, pushPricing, runPricing } from "@/lib/api";
+import {
+  connectDirectOta,
+  connectPms,
+  createBillingCheckout,
+  createProperty,
+  pushDirectPricing,
+  pushPricing,
+  revokeDirectOta,
+  runPricing,
+  submitDirectOta2fa,
+} from "@/lib/api";
 import { ActionState } from "@/lib/types";
 
 function numberValue(formData: FormData, key: string) {
@@ -76,6 +86,65 @@ export async function applyRecommendationsAction(_: ActionState, formData: FormD
     return { ok: true, message: "Optimized rates queued for all connected channels." };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Unable to apply recommendations." };
+  }
+}
+
+export async function connectDirectOtaAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await connectDirectOta({
+      property_id: formData.get("propertyId"),
+      platform: formData.get("platform"),
+      email: formData.get("email"),
+      password: formData.get("password"),
+      consent_accepted: formData.get("consentAccepted") === "on",
+      dry_run: formData.get("dryRun") === "on",
+    });
+    revalidatePath("/dashboard/connections");
+    return { ok: true, message: "Direct OTA credentials encrypted and test login queued." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Unable to connect direct OTA mode." };
+  }
+}
+
+export async function submitDirectOta2faAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await submitDirectOta2fa({
+      property_id: formData.get("propertyId"),
+      platform: formData.get("platform") || undefined,
+      code: formData.get("code"),
+    });
+    revalidatePath("/dashboard/connections");
+    return { ok: true, message: "2FA code sent to the active browser session." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Unable to submit 2FA code." };
+  }
+}
+
+export async function pushDirectPricingAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const propertyId = String(formData.get("propertyId"));
+    const rates = JSON.parse(String(formData.get("rates") ?? "[]"));
+    await pushDirectPricing({
+      property_id: propertyId,
+      platform: formData.get("platform") || undefined,
+      rates,
+      dry_run: false,
+      consent_accepted: formData.get("consentAccepted") === "on",
+    });
+    revalidatePath("/dashboard/connections");
+    return { ok: true, message: "High-risk direct push queued in headed Chrome." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Unable to queue direct push." };
+  }
+}
+
+export async function revokeDirectOtaAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await revokeDirectOta(String(formData.get("credentialId")));
+    revalidatePath("/dashboard/connections");
+    return { ok: true, message: "Direct OTA access revoked and encrypted credentials deleted." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Unable to revoke direct OTA access." };
   }
 }
 

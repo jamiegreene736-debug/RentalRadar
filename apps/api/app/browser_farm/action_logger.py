@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from playwright.async_api import Page
 
@@ -28,13 +29,25 @@ class BrowserActionLogger:
             fh.write(json.dumps(record, default=str) + "\n")
 
     async def attach(self, page: Page) -> None:
-        page.on("request", lambda request: self.write("request", {"method": request.method, "url": request.url}))
+        page.on("request", lambda request: self.write("request", {"method": request.method, "url": _safe_url(request.url)}))
         page.on(
             "response",
             lambda response: self.write(
                 "response",
-                {"status": response.status, "url": response.url},
+                {"status": response.status, "url": _safe_url(response.url)},
             ),
         )
-        page.on("console", lambda msg: self.write("console", {"type": msg.type, "text": msg.text}))
+        page.on("console", lambda msg: self.write("console", {"type": msg.type, "text": _safe_text(msg.text)}))
         page.on("pageerror", lambda exc: self.write("pageerror", {"message": str(exc)}))
+
+
+def _safe_url(url: str) -> str:
+    parsed = urlsplit(url)
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+
+
+def _safe_text(text: str) -> str:
+    lowered = text.lower()
+    if any(marker in lowered for marker in ("password", "cookie", "token", "session", "authorization")):
+        return "[redacted]"
+    return text[:500]

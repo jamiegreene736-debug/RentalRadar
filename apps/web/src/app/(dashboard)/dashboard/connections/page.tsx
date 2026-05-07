@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { CheckCircle2, Chrome, Compass, KeyRound, PlugZap } from "lucide-react";
 
+import { DirectOtaAutomationCard } from "@/app/(dashboard)/components/direct-ota-automation-card";
 import { connectionCards } from "@/app/(dashboard)/components/dashboard-data";
 import { GlassCard, PanelTitle } from "@/app/(dashboard)/components/glass-card";
 import { PmsConnectPanel } from "@/components/pms-connect-panel";
 import { Button } from "@/components/ui/button";
+import { demoProperty } from "@/lib/demo-data";
+import { getOtaDirectStatus } from "@/lib/api";
 
-export default function ConnectionsHubPage() {
+export default async function ConnectionsHubPage() {
+  const otaStatus = await getOtaDirectStatus();
+
   return (
     <div className="grid gap-6">
       <div>
@@ -48,6 +53,12 @@ export default function ConnectionsHubPage() {
           <ExtensionInstallCard icon={Compass} title="Install Safari Extension" href="/extension/safari" status="Safari support ready for macOS hosts" />
         </div>
       </GlassCard>
+
+      <DirectOtaAutomationCard
+        propertyId={demoProperty.id}
+        credentials={otaStatus.credentials}
+        highRiskNotice={otaStatus.high_risk_notice}
+      />
     </div>
   );
 }

@@ -28,6 +28,7 @@ celery_app.conf.update(
         "app.workers.tasks.execute_trained_scraper": {"queue": "scraping"},
         "app.workers.tasks.run_scheduled_market_scans": {"queue": "scheduler"},
         "app.workers.tasks.push_rate_to_pms": {"queue": "pms"},
+        "app.workers.tasks.ota_direct_push_task": {"queue": "scraping"},
         "app.workers.tasks.pull_rates_from_pms": {"queue": "pms"},
         "app.workers.tasks.sync_all_pms_connections": {"queue": "scheduler"},
     },

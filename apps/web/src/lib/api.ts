@@ -5,6 +5,7 @@ import {
   BillingSessionResponse,
   ErrorDashboardResponse,
   MarketRatesResponse,
+  OtaDirectStatusResponse,
   PropertyResponse,
   ScrapingLegalNoticeResponse,
   UsageSummaryResponse,
@@ -40,6 +41,9 @@ async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
   if (!response.ok) {
     const text = await response.text();
     throw new Error(text || `API request failed: ${response.status}`);
+  }
+  if (response.status === 204) {
+    return undefined as T;
   }
   return response.json() as Promise<T>;
 }
@@ -90,6 +94,47 @@ export async function pushPricing(payload: Record<string, unknown>) {
     method: "POST",
     json: payload,
   });
+}
+
+export async function connectDirectOta(payload: Record<string, unknown>) {
+  return apiFetch("/ota/connect-direct", {
+    method: "POST",
+    json: payload,
+  });
+}
+
+export async function submitDirectOta2fa(payload: Record<string, unknown>) {
+  return apiFetch("/ota/2fa-submit", {
+    method: "POST",
+    json: payload,
+  });
+}
+
+export async function pushDirectPricing(payload: Record<string, unknown>) {
+  return apiFetch("/pricing/push-direct", {
+    method: "POST",
+    json: payload,
+  });
+}
+
+export async function revokeDirectOta(credentialId: string) {
+  return apiFetch(`/ota/direct/${credentialId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getOtaDirectStatus(): Promise<OtaDirectStatusResponse> {
+  try {
+    return await apiFetch<OtaDirectStatusResponse>("/ota/status", {
+      next: { revalidate: 15 },
+    });
+  } catch {
+    return {
+      credentials: [],
+      high_risk_notice:
+        "This may violate platform TOS and risks account suspension. Use at your own risk. RentalRadar strongly recommends the Chrome/Safari extension or official PMS APIs instead.",
+    };
+  }
 }
 
 export async function createBillingCheckout(payload: { plan_code: string; property_quantity?: number }) {

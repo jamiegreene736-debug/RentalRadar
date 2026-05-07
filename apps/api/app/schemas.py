@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
-from app.db.models import PmsProvider, ScrapeSource
+from app.db.models import OtaDirectPlatform, OtaDirectStatus, PmsProvider, ScrapeSource
 
 
 class AddressPropertyCreate(BaseModel):
@@ -160,6 +160,59 @@ class PricingPushRequest(BaseModel):
 class PricingPushResponse(BaseModel):
     queued_push_ids: list[UUID]
     task_id: str
+
+
+class OtaDirectConnectRequest(BaseModel):
+    property_id: UUID
+    platform: OtaDirectPlatform
+    email: str = Field(min_length=3)
+    password: str = Field(min_length=8)
+    consent_accepted: bool = False
+    dry_run: bool = True
+
+
+class OtaDirectCredentialResponse(BaseModel):
+    id: UUID
+    property_id: UUID
+    platform: OtaDirectPlatform
+    status: OtaDirectStatus
+    last_successful_login: datetime | None
+    last_push: datetime | None
+    failure_count: int
+    two_fa_attempts: int
+    last_error: str | None = None
+    high_risk_notice: str
+
+
+class OtaDirectConnectResponse(BaseModel):
+    credential: OtaDirectCredentialResponse
+    task_id: str | None = None
+    high_risk_notice: str
+
+
+class OtaDirectTwoFactorRequest(BaseModel):
+    property_id: UUID
+    platform: OtaDirectPlatform | None = None
+    code: str = Field(min_length=6, max_length=6)
+
+
+class OtaDirectPushRequest(BaseModel):
+    property_id: UUID
+    platform: OtaDirectPlatform | None = None
+    rates: list[PricingPushItem] = Field(min_length=1)
+    dry_run: bool = False
+    consent_accepted: bool = False
+
+
+class OtaDirectPushResponse(BaseModel):
+    task_id: str
+    queued: bool
+    high_risk_notice: str
+
+
+class OtaDirectStatusResponse(BaseModel):
+    credentials: list[OtaDirectCredentialResponse]
+    high_risk_notice: str
 
 
 class PricingRunRequest(BaseModel):

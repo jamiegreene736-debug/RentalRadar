@@ -12,6 +12,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -79,6 +80,20 @@ class PmsProvider(str, enum.Enum):
     other = "other"
 
 
+class OtaDirectPlatform(str, enum.Enum):
+    airbnb = "airbnb"
+    vrbo = "vrbo"
+    booking = "booking"
+
+
+class OtaDirectStatus(str, enum.Enum):
+    pending = "pending"
+    active = "active"
+    two_fa_required = "2fa_required"
+    failed = "failed"
+    revoked = "revoked"
+
+
 class AgentTrainingStatus(str, enum.Enum):
     candidate = "candidate"
     validating = "validating"
@@ -96,6 +111,13 @@ recommendation_status_enum = Enum(
 )
 pms_status_enum = Enum(PmsConnectionStatus, name="pms_connection_status", create_type=False)
 pms_provider_enum = Enum(PmsProvider, name="pms_provider", create_type=False)
+ota_direct_platform_enum = Enum(OtaDirectPlatform, name="ota_direct_platform", create_type=False)
+ota_direct_status_enum = Enum(
+    OtaDirectStatus,
+    name="ota_direct_status",
+    create_type=False,
+    values_callable=lambda values: [item.value for item in values],
+)
 agent_training_status_enum = Enum(
     AgentTrainingStatus,
     name="agent_training_status",
@@ -582,6 +604,40 @@ class PmsConnection(Base, TimestampMixin):
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[str | None] = mapped_column(Text)
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+
+
+class OtaDirectCredential(Base):
+    __tablename__ = "ota_direct_credentials"
+    __table_args__ = (UniqueConstraint("user_id", "property_id", "platform"),)
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    property_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("properties.id", ondelete="CASCADE"),
+        index=True,
+    )
+    platform: Mapped[OtaDirectPlatform] = mapped_column(ota_direct_platform_enum)
+    encrypted_credentials: Mapped[bytes] = mapped_column(LargeBinary)
+    encryption_salt: Mapped[str] = mapped_column(Text)
+    last_successful_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_push: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[OtaDirectStatus] = mapped_column(
+        ota_direct_status_enum,
+        default=OtaDirectStatus.pending,
+    )
+    consent_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    consent_ip: Mapped[str | None] = mapped_column(Text)
+    failure_count: Mapped[int] = mapped_column(Integer, default=0)
+    two_fa_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
 
 class PropertyPmsMapping(Base, TimestampMixin):

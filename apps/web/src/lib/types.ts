@@ -78,6 +78,27 @@ export type PmsProvider =
   | "direct"
   | "other";
 
+export type OtaDirectPlatform = "airbnb" | "vrbo" | "booking";
+export type OtaDirectStatus = "pending" | "active" | "2fa_required" | "failed" | "revoked";
+
+export type OtaDirectCredential = {
+  id: string;
+  property_id: string;
+  platform: OtaDirectPlatform;
+  status: OtaDirectStatus;
+  last_successful_login: string | null;
+  last_push: string | null;
+  failure_count: number;
+  two_fa_attempts: number;
+  last_error: string | null;
+  high_risk_notice: string;
+};
+
+export type OtaDirectStatusResponse = {
+  credentials: OtaDirectCredential[];
+  high_risk_notice: string;
+};
+
 export type ActionState = {
   ok: boolean;
   message: string;

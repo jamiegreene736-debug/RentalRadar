@@ -272,6 +272,14 @@ def generate_recommendations(
     db.flush()
     assign_active_experiments(db, rental, recommendations)
     db.commit()
+    try:
+        from app.services.direct_ota import queue_direct_push_after_recalculation
+
+        queue_direct_push_after_recalculation(db, property_id, recommendations)
+    except Exception:
+        # Direct OTA mode is an optional high-risk add-on; pricing generation
+        # must remain successful even if its queue path is unavailable.
+        pass
     return recommendations
 
 

@@ -6,6 +6,7 @@ from uuid import UUID
 
 from celery.signals import worker_ready
 from sqlalchemy import select
+from playwright.async_api import Page
 
 from app.agents.orchestrator import MarketScrapeOrchestrator
 from app.agents.types import ScrapeTarget, ScraperStrategyPlan
@@ -25,6 +26,9 @@ from app.browser_farm.runner import execute_generated_scraper_code, run_trained_
 from app.db.models import (
     AgentTrainingRun,
     AgentTrainingStatus,
+    OtaDirectCredential,
+    OtaDirectPlatform,
+    OtaDirectStatus,
     RateObservation,
     PmsConnection,
     PmsConnectionStatus,
@@ -38,6 +42,7 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal
 from app.services.cache import JsonCache
+from app.services.direct_ota import PLATFORM_LOGIN_URLS, DirectOTAPusher
 from app.services.pms import PmsConnectorRegistry
 from app.services.pricing_engine import generate_recommendations
 from app.services.usage import UsageLimitExceeded, require_usage_allowance
@@ -453,3 +458,248 @@ def sync_all_pms_connections() -> dict:
         return {"queued": queued}
     finally:
         db.close()
+
+
+@celery_app.task(name="app.workers.tasks.ota_direct_push_task", bind=True, max_retries=1)
+def ota_direct_push_task(
+    self,
+    property_id: str,
+    user_id: str,
+    rate_calendar: list[dict],
+    platform: str | None = None,
+    dry_run: bool = False,
+) -> dict:
+    """High-risk opt-in server-side direct OTA push.
+
+    This task never logs plaintext credentials and keeps the headed Chrome
+    session alive while waiting for dashboard-submitted 2FA codes.
+    """
+
+    db = SessionLocal()
+    pusher = DirectOTAPusher()
+    started = datetime.now(timezone.utc)
+    try:
+        query = (
+            select(OtaDirectCredential)
+            .where(OtaDirectCredential.property_id == UUID(property_id))
+            .where(OtaDirectCredential.user_id == UUID(user_id))
+            .where(OtaDirectCredential.status != OtaDirectStatus.revoked)
+        )
+        if platform:
+            query = query.where(OtaDirectCredential.platform == OtaDirectPlatform(platform))
+        credentials = list(db.scalars(query).all())
+        if not credentials:
+            return {"status": "missing_credentials", "property_id": property_id}
+
+        results = []
+        for credential in credentials:
+            try:
+                result = asyncio.run(_run_direct_ota_session(db, pusher, credential, rate_calendar, dry_run))
+                results.append(result)
+            except Exception as exc:
+                db.rollback()
+                pusher.mark_status(
+                    db,
+                    credential,
+                    OtaDirectStatus.failed,
+                    error="Direct OTA push failed. Use the Chrome/Safari extension instead.",
+                )
+                results.append(
+                    {
+                        "credential_id": str(credential.id),
+                        "platform": credential.platform.value,
+                        "status": "failed",
+                        "error": str(exc),
+                    }
+                )
+        return {
+            "status": "completed",
+            "dry_run": dry_run,
+            "duration_seconds": (datetime.now(timezone.utc) - started).total_seconds(),
+            "results": results,
+        }
+    except Exception as exc:
+        db.rollback()
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=45)
+        return {"status": "failed", "property_id": property_id, "error": str(exc)}
+    finally:
+        db.close()
+
+
+async def _run_direct_ota_session(
+    db,
+    pusher: DirectOTAPusher,
+    credential: OtaDirectCredential,
+    rate_calendar: list[dict],
+    dry_run: bool,
+) -> dict:
+    decrypted = pusher.decrypt_credentials(credential)
+    job_id = f"ota-direct-{credential.id}"
+    login_url = PLATFORM_LOGIN_URLS[credential.platform]
+
+    async with launch_headed_browser(job_id=job_id) as session:
+        page = session.page
+        session.action_logger.write(
+            "ota_direct.started",
+            {
+                "credential_id": str(credential.id),
+                "property_id": str(credential.property_id),
+                "platform": credential.platform.value,
+                "dry_run": dry_run,
+                "rate_count": len(rate_calendar),
+            },
+        )
+        await page.goto(login_url, wait_until="domcontentloaded", timeout=90_000)
+        await _fill_first_visible(page, [
+            "input[type='email']",
+            "input[name='email']",
+            "input#email",
+            "input[autocomplete='username']",
+        ], decrypted["email"])
+        await _click_first_visible(page, [
+            "button[type='submit']",
+            "button:has-text('Continue')",
+            "button:has-text('Next')",
+            "button:has-text('Log in')",
+        ])
+        await asyncio.sleep(1.2)
+        await _fill_first_visible(page, [
+            "input[type='password']",
+            "input[name='password']",
+            "input#password",
+            "input[autocomplete='current-password']",
+        ], decrypted["password"])
+        await _click_first_visible(page, [
+            "button[type='submit']",
+            "button:has-text('Log in')",
+            "button:has-text('Sign in')",
+            "button:has-text('Continue')",
+        ])
+        await page.wait_for_load_state("domcontentloaded", timeout=60_000)
+
+        if await _sms_or_email_2fa_detected(page):
+            session.action_logger.write(
+                "ota_direct.2fa_sms_email_detected",
+                {"credential_id": str(credential.id), "platform": credential.platform.value},
+            )
+
+        if await _authenticator_2fa_required(page):
+            credential.status = OtaDirectStatus.two_fa_required
+            credential.two_fa_attempts = 0
+            db.add(credential)
+            db.commit()
+            pusher.notify_2fa_required(credential)
+
+            while credential.two_fa_attempts < 3:
+                code = await pusher.wait_for_2fa_code(
+                    user_id=credential.user_id,
+                    property_id=credential.property_id,
+                    platform=credential.platform,
+                )
+                if code is None:
+                    pusher.mark_status(
+                        db,
+                        credential,
+                        OtaDirectStatus.failed,
+                        error="2FA timed out. Use the Chrome/Safari extension instead.",
+                    )
+                    return {"credential_id": str(credential.id), "platform": credential.platform.value, "status": "2fa_timeout"}
+                await _submit_2fa_code(page, code)
+                await asyncio.sleep(3)
+                if not await _authenticator_2fa_required(page):
+                    break
+                credential.two_fa_attempts += 1
+                db.add(credential)
+                db.commit()
+                pusher.notify_2fa_required(credential)
+
+            if credential.two_fa_attempts >= 3 and await _authenticator_2fa_required(page):
+                pusher.mark_status(
+                    db,
+                    credential,
+                    OtaDirectStatus.failed,
+                    error="2FA failed three times. Switch to the Chrome/Safari extension.",
+                )
+                return {"credential_id": str(credential.id), "platform": credential.platform.value, "status": "2fa_failed"}
+
+        pusher.mark_status(db, credential, OtaDirectStatus.active)
+        if dry_run:
+            return {"credential_id": str(credential.id), "platform": credential.platform.value, "status": "login_verified"}
+
+        await _apply_rate_calendar_placeholder(page, credential.platform, rate_calendar, session.action_logger)
+        pusher.mark_status(db, credential, OtaDirectStatus.active, pushed=True)
+        return {
+            "credential_id": str(credential.id),
+            "platform": credential.platform.value,
+            "status": "pushed",
+            "rate_count": len(rate_calendar),
+        }
+
+
+async def _fill_first_visible(page: Page, selectors: list[str], value: str) -> None:
+    for selector in selectors:
+        locator = page.locator(selector).first
+        if await locator.count() > 0:
+            try:
+                await locator.fill(value, timeout=5_000)
+                return
+            except Exception:
+                continue
+    raise RuntimeError("Required login field was not found")
+
+
+async def _click_first_visible(page: Page, selectors: list[str]) -> None:
+    for selector in selectors:
+        locator = page.locator(selector).first
+        if await locator.count() > 0:
+            try:
+                await locator.click(timeout=5_000)
+                return
+            except Exception:
+                continue
+
+
+async def _authenticator_2fa_required(page: Page) -> bool:
+    two_fa_count = await page.locator("input[aria-label='Verification code'], input[name='otp'], #code-input").count()
+    return two_fa_count > 0
+
+
+async def _sms_or_email_2fa_detected(page: Page) -> bool:
+    return (
+        await page.locator(
+            "text=/text message|sms|email verification|send code|verification email/i"
+        ).count()
+        > 0
+    )
+
+
+async def _submit_2fa_code(page: Page, code: str) -> None:
+    locator = page.locator("input[aria-label='Verification code'], input[name='otp'], #code-input").first
+    await locator.fill(code, timeout=10_000)
+    await _click_first_visible(page, [
+        "button[type='submit']",
+        "button:has-text('Verify')",
+        "button:has-text('Continue')",
+        "button:has-text('Submit')",
+    ])
+
+
+async def _apply_rate_calendar_placeholder(page: Page, platform: OtaDirectPlatform, rate_calendar: list[dict], action_logger) -> None:
+    """Placeholder for agent-trained calendar DOM operations.
+
+    The Site Analyzer/Playwright Trainer agents should replace these selectors
+    with platform/layout-specific JS/Python generated strategies before broad
+    production rollout.
+    """
+
+    action_logger.write(
+        "ota_direct.rate_push_placeholder",
+        {"platform": platform.value, "rate_count": len(rate_calendar)},
+    )
+    for item in rate_calendar[:30]:
+        await asyncio.sleep(0.15)
+        action_logger.write(
+            "ota_direct.rate_prepared",
+            {"stay_date": item.get("stay_date"), "rate_cents": item.get("rate_cents")},
+        )

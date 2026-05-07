@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
     token_encryption_key: str = "dev-only-replace-me"
+    ota_direct_master_secret: str = "dev-only-direct-ota-replace-me"
+    ota_2fa_wait_seconds: int = 600
+    ota_notification_email_from: str = "security@rentalradar.ai"
     scraper_proxy_urls: list[str] = Field(default_factory=list)
     scraper_proxy_redis_key: str = "rentalradar:proxy_pool"
     scraper_proxy_cooldown_seconds: int = 120
