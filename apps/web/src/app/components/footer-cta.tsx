@@ -51,7 +51,7 @@ export function FooterCta() {
         </SectionReveal>
         <div className="mt-10 flex flex-col justify-between gap-4 border-t border-white/10 pt-8 text-sm text-slate-500 sm:flex-row sm:items-center">
           <div className="flex items-center gap-4">
-            <BrandLogo markClassName="size-9" textClassName="[&>span:first-child]:text-sm [&>span:last-child]:text-[10px]" />
+            <BrandLogo markClassName="h-9 w-14" textClassName="text-sm [&>span]:text-sm" />
             <p>© 2026</p>
           </div>
           <p>Live market checks. Clear recommendations. Smarter rates.</p>

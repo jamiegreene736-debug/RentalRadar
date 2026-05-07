@@ -30,7 +30,7 @@ export function DashboardSidebar() {
       <div className="flex items-center justify-between">
         <Link href="/dashboard" className="flex items-center gap-3">
           <BrandLogo
-            markClassName="size-11"
+            markClassName="h-11 w-16"
             showText={!collapsed}
             textClassName="[&>span:first-child]:text-sm [&>span:first-child]:text-slate-950 [&>span:last-child]:text-slate-500"
           />
