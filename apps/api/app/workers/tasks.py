@@ -19,8 +19,9 @@ from app.browser_farm.metrics import (
     refresh_worker_metrics,
     start_metrics_server,
 )
+from app.browser_farm.headed import launch_headed_browser
 from app.browser_farm.proxy import ProxyRotator
-from app.browser_farm.runner import run_trained_scraping_script
+from app.browser_farm.runner import execute_generated_scraper_code, run_trained_scraping_script
 from app.db.models import (
     AgentTrainingRun,
     AgentTrainingStatus,
@@ -252,6 +253,64 @@ def run_trained_scraping_script_task(self, payload: dict) -> dict:
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc, countdown=45 * (self.request.retries + 1))
         return {"status": "failed", "error": str(exc), "proxy": proxy.redacted() if proxy else None}
+    finally:
+        BROWSER_ACTIVE.dec()
+        refresh_worker_metrics()
+
+
+@celery_app.task(name="app.workers.tasks.execute_trained_scraper", bind=True, max_retries=3)
+def execute_trained_scraper(
+    self,
+    property_address: str,
+    trained_script: str,
+    proxy: str | None = None,
+) -> dict:
+    """Compatibility task for Trainer Agent generated Python scripts.
+
+    The script should either define:
+      async def scrape(page, context, target, strategy, human): ...
+    or assign a JSON-serializable `result` dict.
+    """
+
+    started = datetime.now(timezone.utc)
+    job_id = str(getattr(self.request, "id", None) or UUID(int=0))
+
+    async def run() -> dict:
+        async with launch_headed_browser(job_id=job_id, proxy_url=proxy) as session:
+            session.action_logger.write(
+                "trained_scraper.started",
+                {"property_address": property_address, "proxy": proxy},
+            )
+            payload = await execute_generated_scraper_code(
+                trained_script,
+                page=session.page,
+                context=session.context,
+            )
+            session.action_logger.write("trained_scraper.completed", {"payload_keys": sorted(payload.keys())})
+            return payload
+
+    BROWSER_ACTIVE.inc()
+    try:
+        with SCRAPE_SECONDS.time():
+            payload = asyncio.run(run())
+        SCRAPE_SUCCESS.inc()
+        return {
+            "status": "succeeded",
+            "property_address": property_address,
+            "duration_seconds": (datetime.now(timezone.utc) - started).total_seconds(),
+            "result": payload,
+        }
+    except Exception as exc:
+        SCRAPE_FAILURE.inc()
+        BROWSER_LAUNCH_FAILURES.inc()
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=45 * (self.request.retries + 1))
+        return {
+            "status": "failed",
+            "property_address": property_address,
+            "duration_seconds": (datetime.now(timezone.utc) - started).total_seconds(),
+            "error": str(exc),
+        }
     finally:
         BROWSER_ACTIVE.dec()
         refresh_worker_metrics()

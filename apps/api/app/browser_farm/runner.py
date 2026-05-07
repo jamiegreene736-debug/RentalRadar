@@ -30,19 +30,25 @@ async def run_trained_scraping_script(
     async with launch_headed_browser(job_id=job_id, proxy=proxy) as session:
         generated_code = strategy.strategy_json.get("generated_python")
         if generated_code:
-            payload = await _execute_generated_code(generated_code, session.page, session.context, target, strategy)
+            payload = await execute_generated_scraper_code(
+                generated_code,
+                page=session.page,
+                context=session.context,
+                target=target,
+                strategy=strategy,
+            )
         else:
             payload = await _execute_strategy_steps(session.page, target, strategy)
         session.action_logger.write("scrape.completed", {"payload_keys": sorted(payload.keys())})
         return _to_execution_result(payload, target, strategy)
 
 
-async def _execute_generated_code(
+async def execute_generated_scraper_code(
     code: str,
     page: Any,
     context: Any,
-    target: ScrapeTarget,
-    strategy: ScraperStrategyPlan,
+    target: ScrapeTarget | None = None,
+    strategy: ScraperStrategyPlan | None = None,
 ) -> dict[str, Any]:
     namespace: dict[str, Any] = {
         "human": {
@@ -52,9 +58,22 @@ async def _execute_generated_code(
     }
     exec(compile(code, "<rentalradar-trained-scraper>", "exec"), namespace)
     scrape = namespace.get("scrape")
-    if scrape is None:
-        raise RuntimeError("generated_python must define async scrape(page, context, target, strategy, human)")
-    return await scrape(page, context, target, strategy.strategy_json, namespace["human"])
+    if scrape is not None:
+        return await scrape(
+            page,
+            context,
+            target,
+            strategy.strategy_json if strategy else {},
+            namespace["human"],
+        )
+
+    result = namespace.get("result")
+    if result is None:
+        raise RuntimeError(
+            "trained_script must define async scrape(page, context, target, strategy, human) "
+            "or assign a result dict"
+        )
+    return result
 
 
 async def _execute_strategy_steps(page: Any, target: ScrapeTarget, strategy: ScraperStrategyPlan) -> dict[str, Any]:
