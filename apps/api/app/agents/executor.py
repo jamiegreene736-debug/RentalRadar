@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import hashlib
 import random
+from uuid import uuid4
 from datetime import timedelta
 
 from app.agents.types import ExtractedRate, ScrapeExecutionResult, ScrapeTarget, ScraperStrategyPlan
+from app.browser_farm.proxy import ProxyRotator
+from app.browser_farm.runner import run_trained_scraping_script
 from app.config import get_settings
 
 
 class ScraperExecutorAgent:
-    """Runs Playwright headless with stealth/proxy support.
+    """Runs trained Playwright code in real headed Chrome through the browser farm.
 
     The deterministic fallback produces realistic-looking observations for
-    local development. Replace `_execute_with_playwright` internals with real
-    site-specific extraction as strategies graduate.
+    tests only when explicitly enabled. Production must run headed Chrome with
+    `headless=False` under Xvfb.
     """
 
     def __init__(self) -> None:
@@ -39,38 +42,33 @@ class ScraperExecutorAgent:
         target: ScrapeTarget,
         strategy: ScraperStrategyPlan,
     ) -> ScrapeExecutionResult:
-        # Import lazily so API-only processes can start without browser binaries.
+        if self.settings.scraper_allow_deterministic_fallback:
+            return self._fallback_result(target, strategy, "explicit_deterministic_fallback")
+        job_id = str(uuid4())
+        proxy_rotator = ProxyRotator()
+        proxy_lease = proxy_rotator.lease(job_id=job_id)
+        target = ScrapeTarget(
+            source=target.source,
+            url=target.url,
+            stay_date_start=target.stay_date_start,
+            stay_date_end=target.stay_date_end,
+            proxy_url=proxy_lease.server if proxy_lease else None,
+        )
         try:
-            from playwright.async_api import async_playwright
-        except ImportError:
-            return self._fallback_result(target, strategy, "playwright_not_installed")
-
-        if self.settings.environment == "local":
-            return self._fallback_result(target, strategy, "local_deterministic_scrape")
-
-        async with async_playwright() as p:
-            launch_kwargs = {"headless": self.settings.scraper_headless}
-            if target.proxy_url:
-                launch_kwargs["proxy"] = {"server": target.proxy_url}
-            browser = await p.chromium.launch(**launch_kwargs)
-            context = await browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"
-                )
+            result = await run_trained_scraping_script(
+                job_id=job_id,
+                target=target,
+                strategy=strategy,
+                proxy=proxy_lease,
             )
-            page = await context.new_page()
-            await page.goto(target.url, wait_until="domcontentloaded", timeout=45000)
-            html = await page.content()
-            title = await page.title()
-            await browser.close()
-
-        if not html:
-            raise RuntimeError("empty_html")
-        result = self._fallback_result(target, strategy, "playwright_dom_loaded")
-        result.raw_html_url = f"memory://{hashlib.sha256(html.encode()).hexdigest()}"
-        result.diagnostics["title"] = title
-        return result
+            if result.success:
+                proxy_rotator.mark_success(proxy_lease)
+            else:
+                proxy_rotator.mark_failure(proxy_lease, result.error_message or "low_confidence")
+            return result
+        except Exception as exc:
+            proxy_rotator.mark_failure(proxy_lease, str(exc))
+            raise
 
     def _fallback_result(
         self,

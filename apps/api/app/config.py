@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/2"
     token_encryption_key: str = "dev-only-replace-me"
     scraper_proxy_urls: list[str] = Field(default_factory=list)
+    scraper_proxy_redis_key: str = "rentalradar:proxy_pool"
+    scraper_proxy_cooldown_seconds: int = 120
+    browser_worker_max_concurrent_browsers: int = 4
+    browser_worker_metrics_port: int = 9108
+    browser_action_log_dir: str = "/tmp/rentalradar/browser-actions"
+    scraper_allow_deterministic_fallback: bool = False
     llm_provider: str = "stub"
     openai_api_key: str | None = None
     stripe_secret_key: str | None = None
@@ -32,7 +38,7 @@ class Settings(BaseSettings):
     default_comp_limit: int = 12
     integration_http_timeout_seconds: float = 30.0
     integration_max_retries: int = 3
-    scraper_headless: bool = True
+    scraper_headless: bool = False
     scraper_stealth: bool = True
     cors_origins: list[AnyHttpUrl] | list[str] = Field(default_factory=lambda: ["*"])
 

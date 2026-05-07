@@ -5,9 +5,10 @@ from datetime import date
 from string import Template
 
 from app.agents.orchestrator import MarketScrapeOrchestrator
-from app.agents.proxy import ProxyRotator
 from app.agents.types import ScrapeTarget
-from app.config import get_settings
+from app.browser_farm.headed import launch_headed_browser
+from app.browser_farm.proxy import ProxyRotator
+from app.browser_farm.stealth import human_type
 from app.db.models import ScrapeSource
 from app.integrations.types import (
     ChannelPropertyRef,
@@ -38,7 +39,6 @@ class AdaptivePlaywrightPmsFallback:
             url=target_url.format(property_id=property_ref.external_property_id),
             stay_date_start=start_date,
             stay_date_end=end_date,
-            proxy_url=ProxyRotator().next_proxy(),
         )
         result = asyncio.run(MarketScrapeOrchestrator().run(target)).result
         if not result.success:
@@ -64,7 +64,7 @@ class AdaptivePlaywrightPmsFallback:
             raise ConnectorError("Playwright push fallback requires a reviewed playwright_push_strategy")
         if not self.credentials.username and not self.credentials.access_token:
             raise ConnectorError("Playwright push fallback requires encrypted login credentials")
-        if get_settings().environment == "local" and self.metadata.get("simulate_playwright_push"):
+        if self.metadata.get("simulate_playwright_push"):
             return ConnectorResult(
                 provider=self.credentials.provider,
                 status="succeeded",
@@ -96,24 +96,16 @@ class AdaptivePlaywrightPmsFallback:
         updates: list[ChannelRateUpdate],
         strategy: dict,
     ) -> None:
-        try:
-            from playwright.async_api import async_playwright
-        except ImportError as exc:
-            raise ConnectorError("Playwright is required for direct PMS push fallback") from exc
-
-        settings = get_settings()
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=settings.scraper_headless)
-            context = await browser.new_context()
-            page = await context.new_page()
-            try:
-                for action in strategy.get("login", []):
-                    await self._run_action(page, action, property_ref, None)
-                for update in updates:
-                    for action in strategy.get("update_rate", []):
-                        await self._run_action(page, action, property_ref, update)
-            finally:
-                await browser.close()
+        proxy = ProxyRotator().lease(job_id=f"pms-push-{property_ref.external_property_id}")
+        async with launch_headed_browser(
+            job_id=f"pms-push-{property_ref.external_property_id}",
+            proxy=proxy,
+        ) as session:
+            for action in strategy.get("login", []):
+                await self._run_action(session.page, action, property_ref, None)
+            for update in updates:
+                for action in strategy.get("update_rate", []):
+                    await self._run_action(session.page, action, property_ref, update)
 
     async def _run_action(self, page, action: dict, property_ref: ChannelPropertyRef, update: ChannelRateUpdate | None) -> None:
         values = {
@@ -132,7 +124,7 @@ class AdaptivePlaywrightPmsFallback:
         if kind == "goto":
             await page.goto(render_template(action["url"], values), wait_until=action.get("wait_until", "domcontentloaded"))
         elif kind == "fill":
-            await page.fill(selector, value)
+            await human_type(page, selector, value)
         elif kind == "click":
             await page.click(selector)
         elif kind == "press":

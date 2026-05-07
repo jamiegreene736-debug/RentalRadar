@@ -4,11 +4,23 @@ import asyncio
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
+from celery.signals import worker_ready
 from sqlalchemy import select
 
 from app.agents.orchestrator import MarketScrapeOrchestrator
-from app.agents.proxy import ProxyRotator
-from app.agents.types import ScrapeTarget
+from app.agents.types import ScrapeTarget, ScraperStrategyPlan
+from app.browser_farm.metrics import (
+    BROWSER_ACTIVE,
+    BROWSER_LAUNCH_FAILURES,
+    SCRAPE_FAILURE,
+    SCRAPE_SECONDS,
+    SCRAPE_SUCCESS,
+    record_proxy,
+    refresh_worker_metrics,
+    start_metrics_server,
+)
+from app.browser_farm.proxy import ProxyRotator
+from app.browser_farm.runner import run_trained_scraping_script
 from app.db.models import (
     AgentTrainingRun,
     AgentTrainingStatus,
@@ -19,6 +31,7 @@ from app.db.models import (
     ScrapeJob,
     ScrapeJobLog,
     ScrapeJobStatus,
+    ScrapeSource,
     ScrapeSnapshot,
     ScraperStrategy,
 )
@@ -28,6 +41,12 @@ from app.services.pms import PmsConnectorRegistry
 from app.services.pricing_engine import generate_recommendations
 from app.services.usage import UsageLimitExceeded, require_usage_allowance
 from app.workers.celery_app import celery_app
+
+
+@worker_ready.connect
+def initialize_worker_metrics(**_: object) -> None:
+    start_metrics_server()
+    refresh_worker_metrics()
 
 
 @celery_app.task(name="app.workers.tasks.run_scrape_job", bind=True, max_retries=2)
@@ -44,13 +63,11 @@ def run_scrape_job(self, scrape_job_id: str) -> dict:
         db.add(ScrapeJobLog(scrape_job_id=job.id, level="info", event="scrape.started"))
         db.commit()
 
-        proxy = ProxyRotator().next_proxy()
         target = ScrapeTarget(
             source=job.source,
             url=job.target_url,
             stay_date_start=job.stay_date_start or date.today(),
             stay_date_end=job.stay_date_end or date.today() + timedelta(days=90),
-            proxy_url=proxy,
         )
         run = asyncio.run(MarketScrapeOrchestrator().run(target))
 
@@ -167,6 +184,77 @@ def run_scrape_job(self, scrape_job_id: str) -> dict:
         return {"status": "failed", "scrape_job_id": scrape_job_id, "error": str(exc)}
     finally:
         db.close()
+
+
+@celery_app.task(name="app.workers.tasks.run_trained_scraping_script", bind=True, max_retries=2)
+def run_trained_scraping_script_task(self, payload: dict) -> dict:
+    """Run AI-generated Playwright Python code on a headed browser-farm worker."""
+
+    started = datetime.now(timezone.utc)
+    proxy_rotator = ProxyRotator()
+    proxy = proxy_rotator.lease(job_id=str(payload["job_id"]))
+    record_proxy(proxy.provider if proxy else None, proxy.server if proxy else None)
+    source = ScrapeSource(payload["target"]["source"])
+    target = ScrapeTarget(
+        source=source,
+        url=payload["target"]["url"],
+        stay_date_start=date.fromisoformat(payload["target"]["stay_date_start"]),
+        stay_date_end=date.fromisoformat(payload["target"]["stay_date_end"]),
+        proxy_url=proxy.server if proxy else None,
+    )
+    strategy = ScraperStrategyPlan(
+        source=source,
+        domain=payload["strategy"]["domain"],
+        layout_fingerprint=payload["strategy"]["layout_fingerprint"],
+        strategy_json=payload["strategy"]["strategy_json"],
+        confidence=float(payload["strategy"].get("confidence", 0.5)),
+    )
+
+    BROWSER_ACTIVE.inc()
+    try:
+        with SCRAPE_SECONDS.time():
+            result = asyncio.run(
+                run_trained_scraping_script(
+                    job_id=str(payload["job_id"]),
+                    target=target,
+                    strategy=strategy,
+                    proxy=proxy,
+                )
+            )
+        if result.success:
+            SCRAPE_SUCCESS.inc()
+            proxy_rotator.mark_success(proxy)
+        else:
+            SCRAPE_FAILURE.inc()
+            proxy_rotator.mark_failure(proxy, result.error_message or "low_confidence")
+        return {
+            "status": "succeeded" if result.success else "failed",
+            "duration_seconds": (datetime.now(timezone.utc) - started).total_seconds(),
+            "confidence": result.extraction_confidence,
+            "rates": [
+                {
+                    "stay_date": rate.stay_date.isoformat(),
+                    "nightly_rate_cents": rate.nightly_rate_cents,
+                    "total_rate_cents": rate.total_rate_cents,
+                    "available": rate.available,
+                    "min_nights": rate.min_nights,
+                    "raw_payload": rate.raw_payload,
+                }
+                for rate in result.rates
+            ],
+            "diagnostics": result.diagnostics,
+            "proxy": proxy.redacted() if proxy else None,
+        }
+    except Exception as exc:
+        SCRAPE_FAILURE.inc()
+        BROWSER_LAUNCH_FAILURES.inc()
+        proxy_rotator.mark_failure(proxy, str(exc))
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=45 * (self.request.retries + 1))
+        return {"status": "failed", "error": str(exc), "proxy": proxy.redacted() if proxy else None}
+    finally:
+        BROWSER_ACTIVE.dec()
+        refresh_worker_metrics()
 
 
 @celery_app.task(name="app.workers.tasks.push_rate_to_pms", bind=True, max_retries=3)

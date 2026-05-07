@@ -24,6 +24,7 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     task_routes={
         "app.workers.tasks.run_scrape_job": {"queue": "scraping"},
+        "app.workers.tasks.run_trained_scraping_script": {"queue": "scraping"},
         "app.workers.tasks.run_scheduled_market_scans": {"queue": "scheduler"},
         "app.workers.tasks.push_rate_to_pms": {"queue": "pms"},
         "app.workers.tasks.pull_rates_from_pms": {"queue": "pms"},

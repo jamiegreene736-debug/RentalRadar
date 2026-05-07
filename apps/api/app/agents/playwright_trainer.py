@@ -17,9 +17,10 @@ class PlaywrightTrainerAgent:
             "domain": domain,
             "layout_fingerprint": analysis.layout_fingerprint,
             "browser": {
-                "headless": True,
+                "headless": False,
                 "stealth": True,
                 "proxy": "{{proxy_url}}",
+                "display": "xvfb",
             },
             "steps": [
                 {"action": "goto", "url": "{{target_url}}", "wait_until": "domcontentloaded"},

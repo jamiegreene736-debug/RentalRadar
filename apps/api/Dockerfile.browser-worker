@@ -1,0 +1,54 @@
+FROM mcr.microsoft.com/playwright/python:latest
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    ENVIRONMENT=production \
+    SCRAPER_HEADLESS=false \
+    SCRAPER_STEALTH=true \
+    BROWSER_WORKER_MAX_CONCURRENT_BROWSERS=4 \
+    BROWSER_WORKER_METRICS_PORT=9108 \
+    DISPLAY=:99
+
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+    xvfb \
+    fonts-liberation \
+    fonts-noto \
+    fonts-noto-color-emoji \
+    fonts-noto-cjk \
+    fonts-dejavu \
+    fonts-freefont-ttf \
+    fontconfig \
+    x11-apps \
+    procps \
+  && install -d -m 0755 /etc/apt/keyrings \
+  && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+    | gpg --dearmor -o /etc/apt/keyrings/google-linux.gpg \
+  && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-linux.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
+    > /etc/apt/sources.list.d/google-chrome.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends google-chrome-stable \
+  && fc-cache -f -v \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir -e .
+
+COPY app ./app
+COPY docker/browser-worker-entrypoint.sh /usr/local/bin/browser-worker-entrypoint.sh
+RUN chmod +x /usr/local/bin/browser-worker-entrypoint.sh \
+  && mkdir -p /tmp/rentalradar/browser-actions \
+  && useradd -m -u 1001 browserworker \
+  && chown -R browserworker:browserworker /app /tmp/rentalradar
+
+USER browserworker
+
+EXPOSE 9108
+
+ENTRYPOINT ["/usr/local/bin/browser-worker-entrypoint.sh"]
+CMD ["bash", "-lc", "celery -A app.workers.celery_app.celery_app worker --loglevel=info --queues=scraping --concurrency=${BROWSER_WORKER_MAX_CONCURRENT_BROWSERS:-4} --max-tasks-per-child=20"]

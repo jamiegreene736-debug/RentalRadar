@@ -1,3 +1,37 @@
+x-api-env: &api-env
+  ENVIRONMENT: local
+  DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/rentalradar
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CELERY_RESULT_BACKEND: redis://redis:6379/2
+  TOKEN_ENCRYPTION_KEY: replace-with-fernet-key
+  SCRAPER_HEADLESS: "false"
+  SCRAPER_STEALTH: "true"
+  SCRAPER_PROXY_REDIS_KEY: rentalradar:proxy_pool
+  BROWSER_WORKER_MAX_CONCURRENT_BROWSERS: "4"
+  BROWSER_WORKER_METRICS_PORT: "9108"
+  BROWSER_ACTION_LOG_DIR: /tmp/rentalradar/browser-actions
+  SCRAPER_ALLOW_DETERMINISTIC_FALLBACK: "false"
+  API_RATE_LIMIT_PER_MINUTE: "120"
+  APP_BASE_URL: http://localhost:3000
+
+x-browser-worker: &browser-worker
+  build:
+    context: ./apps/api
+    dockerfile: Dockerfile.browser-worker
+  env_file:
+    - ./apps/api/.env
+  environment:
+    <<: *api-env
+  shm_size: "1gb"
+  volumes:
+    - ./apps/api:/app
+    - browser-actions:/tmp/rentalradar/browser-actions
+  depends_on:
+    - postgres
+    - redis
+  restart: unless-stopped
+
 services:
   postgres:
     image: postgis/postgis:16-3.4
@@ -9,32 +43,90 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rentalradar"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   api:
     build:
       context: ./apps/api
     env_file:
       - ./apps/api/.env
+    environment:
+      <<: *api-env
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./apps/api:/app
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
-  worker:
+  browser-worker-1:
+    <<: *browser-worker
+    container_name: rentalradar-browser-worker-1
+    ports:
+      - "9108:9108"
+    environment:
+      <<: *api-env
+      BROWSER_WORKER_METRICS_PORT: "9108"
+      CELERY_WORKER_NAME: browser-worker-1
+
+  browser-worker-2:
+    <<: *browser-worker
+    container_name: rentalradar-browser-worker-2
+    ports:
+      - "9109:9108"
+    environment:
+      <<: *api-env
+      BROWSER_WORKER_METRICS_PORT: "9108"
+      CELERY_WORKER_NAME: browser-worker-2
+
+  browser-worker-3:
+    <<: *browser-worker
+    profiles: ["scale4"]
+    container_name: rentalradar-browser-worker-3
+    ports:
+      - "9110:9108"
+    environment:
+      <<: *api-env
+      BROWSER_WORKER_METRICS_PORT: "9108"
+      CELERY_WORKER_NAME: browser-worker-3
+
+  browser-worker-4:
+    <<: *browser-worker
+    profiles: ["scale4"]
+    container_name: rentalradar-browser-worker-4
+    ports:
+      - "9111:9108"
+    environment:
+      <<: *api-env
+      BROWSER_WORKER_METRICS_PORT: "9108"
+      CELERY_WORKER_NAME: browser-worker-4
+
+  beat:
     build:
       context: ./apps/api
     env_file:
       - ./apps/api/.env
-    command: celery -A app.workers.celery_app.celery_app worker --loglevel=info
+    environment:
+      <<: *api-env
+    command: celery -A app.workers.celery_app.celery_app beat --loglevel=info
     volumes:
       - ./apps/api:/app
     depends_on:
@@ -43,18 +135,47 @@ services:
 
   web:
     image: node:22-alpine
-    working_dir: /app
-    command: sh -c "npm install && npm run dev"
+    working_dir: /repo
+    command: sh -c "npm install && npm run web:dev"
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://api:8000
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
       NEXT_PUBLIC_ORGANIZATION_ID: 00000000-0000-0000-0000-000000000001
       NEXT_PUBLIC_USER_ID: 00000000-0000-0000-0000-000000000002
     volumes:
-      - ./apps/web:/app
+      - ./:/repo
     ports:
       - "3000:3000"
     depends_on:
       - api
 
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - browser-worker-1
+      - browser-worker-2
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3002:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   postgres-data:
+  grafana-data:
+  browser-actions:
