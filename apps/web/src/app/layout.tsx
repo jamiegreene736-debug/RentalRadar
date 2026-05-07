@@ -50,6 +50,15 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "https://rentalradar.ai",
   },
+  icons: {
+    icon: [
+      {
+        url: "/favicon.svg",
+        type: "image/svg+xml",
+      },
+    ],
+    shortcut: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

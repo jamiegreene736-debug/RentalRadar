@@ -1,6 +1,7 @@
 import { ArrowRight, Mail } from "lucide-react";
 
 import { SectionReveal } from "@/app/components/section-reveal";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getStartedHref } from "@/lib/site-config";
@@ -48,8 +49,11 @@ export function FooterCta() {
             </form>
           </div>
         </SectionReveal>
-        <div className="mt-10 flex flex-col justify-between gap-4 border-t border-white/10 pt-8 text-sm text-slate-500 sm:flex-row">
-          <p>© 2026 RentalRadar.ai</p>
+        <div className="mt-10 flex flex-col justify-between gap-4 border-t border-white/10 pt-8 text-sm text-slate-500 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-4">
+            <BrandLogo markClassName="size-9" textClassName="[&>span:first-child]:text-sm [&>span:last-child]:text-[10px]" />
+            <p>© 2026</p>
+          </div>
           <p>Real Chrome. Live data. Adaptive pricing.</p>
         </div>
       </div>

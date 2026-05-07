@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Activity, ArrowRight, LogIn } from "lucide-react";
+import { ArrowRight, LogIn } from "lucide-react";
 
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { signInPath } from "@/lib/auth-config";
 import { getStartedHref } from "@/lib/site-config";
@@ -10,10 +11,7 @@ export function SiteHeader() {
     <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#050816]/[0.72] backdrop-blur-xl">
       <div className="container flex h-16 items-center justify-between">
         <Link href="/" className="flex items-center gap-3">
-          <span className="grid size-9 place-items-center rounded-lg border border-cyan-300/30 bg-cyan-300/10 shadow-[0_0_28px_rgba(34,211,238,0.28)]">
-            <Activity className="size-5 text-cyan-200" />
-          </span>
-          <span className="text-base font-semibold tracking-wide text-white">RentalRadar.ai</span>
+          <BrandLogo markClassName="size-9" textClassName="hidden sm:block" />
         </Link>
         <nav className="hidden items-center gap-8 text-sm text-slate-300 md:flex">
           <a href="#how-it-works" className="transition hover:text-cyan-200">
