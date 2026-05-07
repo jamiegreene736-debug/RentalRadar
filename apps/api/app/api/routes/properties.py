@@ -385,7 +385,21 @@ def _queue_target_month_browser_scans(
         targets = [(url, infer_source(url), None) for url in default_market_targets(address)]
 
     jobs: list[ScrapeJob] = []
+    existing_job_ids: list[UUID] = []
     for target_url, source, competitor_id in targets:
+        existing_job = db.scalar(
+            select(ScrapeJob)
+            .where(ScrapeJob.property_id == rental.id)
+            .where(ScrapeJob.target_url == target_url)
+            .where(ScrapeJob.stay_date_start == month_start)
+            .where(ScrapeJob.stay_date_end == month_end - timedelta(days=1))
+            .where(ScrapeJob.status.in_([ScrapeJobStatus.queued, ScrapeJobStatus.running]))
+            .order_by(desc(ScrapeJob.created_at))
+        )
+        if existing_job is not None:
+            existing_job_ids.append(existing_job.id)
+            continue
+
         try:
             require_usage_allowance(
                 db,
@@ -422,7 +436,7 @@ def _queue_target_month_browser_scans(
     for job in jobs:
         db.refresh(job)
         run_scrape_job.delay(str(job.id))
-    return [job.id for job in jobs]
+    return [*existing_job_ids, *[job.id for job in jobs]]
 
 
 def _float_or_none(value: Decimal | float | None) -> float | None:
