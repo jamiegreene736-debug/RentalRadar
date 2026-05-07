@@ -44,7 +44,7 @@ class ScraperExecutorAgent:
     ) -> ScrapeExecutionResult:
         if self.settings.scraper_allow_deterministic_fallback:
             return self._fallback_result(target, strategy, "explicit_deterministic_fallback")
-        job_id = str(uuid4())
+        job_id = target.browser_session_id or str(uuid4())
         proxy_rotator = ProxyRotator()
         proxy_lease = proxy_rotator.lease(job_id=job_id)
         target = ScrapeTarget(
@@ -53,6 +53,7 @@ class ScraperExecutorAgent:
             stay_date_start=target.stay_date_start,
             stay_date_end=target.stay_date_end,
             proxy_url=proxy_lease.server if proxy_lease else None,
+            browser_session_id=job_id,
         )
         try:
             result = await run_trained_scraping_script(

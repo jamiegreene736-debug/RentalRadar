@@ -74,6 +74,33 @@ class MarketRatesResponse(BaseModel):
     recommendations: list[PricingRecommendationResponse]
 
 
+class ScrapeSessionEventResponse(BaseModel):
+    at: datetime
+    event: str
+    level: str = "info"
+    message: str | None = None
+    url: str | None = None
+    status: int | None = None
+
+
+class ScrapeSessionResponse(BaseModel):
+    id: UUID
+    source: ScrapeSource
+    status: str
+    target_url: str
+    browser_session_id: str
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    current_url: str | None = None
+    latest_screenshot_data_url: str | None = None
+    events: list[ScrapeSessionEventResponse] = Field(default_factory=list)
+
+
+class ScrapeSessionsResponse(BaseModel):
+    property_id: UUID
+    sessions: list[ScrapeSessionResponse]
+
+
 class PmsConnectRequest(BaseModel):
     provider: PmsProvider
     account_ref: str | None = None

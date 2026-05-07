@@ -124,6 +124,7 @@ async def launch_headed_browser(
         await apply_stealth_patches(context, profile)
         page = await context.new_page()
         await action_logger.attach(page)
+        setattr(page, "_rentalradar_action_logger", action_logger)
         action_logger.write("browser.launched", {"proxy": proxy.redacted() if proxy else None, "profile": profile})
         await humanize_page(page)
         yield HeadedBrowserSession(

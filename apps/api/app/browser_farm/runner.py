@@ -39,6 +39,7 @@ async def run_trained_scraping_script(
             )
         else:
             payload = await _execute_strategy_steps(session.page, target, strategy)
+        await session.action_logger.screenshot(session.page, "scrape.screenshot")
         session.action_logger.write("scrape.completed", {"payload_keys": sorted(payload.keys())})
         return _to_execution_result(payload, target, strategy)
 
@@ -79,6 +80,9 @@ async def execute_generated_scraper_code(
 async def _execute_strategy_steps(page: Any, target: ScrapeTarget, strategy: ScraperStrategyPlan) -> dict[str, Any]:
     diagnostics: dict[str, Any] = {"mode": "json_strategy"}
     await page.goto(target.url, wait_until="domcontentloaded", timeout=60_000)
+    action_logger = getattr(page, "_rentalradar_action_logger", None)
+    if action_logger:
+        await action_logger.screenshot(page, "scrape.page_loaded")
     await human_scroll(page, min_scrolls=1, max_scrolls=3)
     diagnostics["title"] = await page.title()
     html = await page.content()

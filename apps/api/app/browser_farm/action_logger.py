@@ -28,6 +28,19 @@ class BrowserActionLogger:
         with self.path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, default=str) + "\n")
 
+    async def screenshot(self, page: Page, event: str = "screenshot.captured") -> str | None:
+        try:
+            screenshot_dir = self.path.parent / "screenshots"
+            screenshot_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+            screenshot_path = screenshot_dir / f"{self.job_id}-{timestamp}.jpg"
+            await page.screenshot(path=str(screenshot_path), type="jpeg", quality=54, full_page=False)
+            self.write(event, {"screenshot_path": str(screenshot_path)})
+            return str(screenshot_path)
+        except Exception as exc:
+            self.write("screenshot.failed", {"message": str(exc)})
+            return None
+
     async def attach(self, page: Page) -> None:
         page.on("request", lambda request: self.write("request", {"method": request.method, "url": _safe_url(request.url)}))
         page.on(

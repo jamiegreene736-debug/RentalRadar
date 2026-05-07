@@ -74,6 +74,7 @@ def run_scrape_job(self, scrape_job_id: str) -> dict:
             url=job.target_url,
             stay_date_start=job.stay_date_start or date.today(),
             stay_date_end=job.stay_date_end or date.today() + timedelta(days=90),
+            browser_session_id=str(job.id),
         )
         run = asyncio.run(MarketScrapeOrchestrator().run(target))
 
@@ -207,6 +208,7 @@ def run_trained_scraping_script_task(self, payload: dict) -> dict:
         stay_date_start=date.fromisoformat(payload["target"]["stay_date_start"]),
         stay_date_end=date.fromisoformat(payload["target"]["stay_date_end"]),
         proxy_url=proxy.server if proxy else None,
+        browser_session_id=str(payload["job_id"]),
     )
     strategy = ScraperStrategyPlan(
         source=source,

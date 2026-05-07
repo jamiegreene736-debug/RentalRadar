@@ -64,6 +64,33 @@ export type MarketRatesResponse = {
   recommendations: PricingRecommendation[];
 };
 
+export type ScrapeSessionEvent = {
+  at: string;
+  event: string;
+  level: string;
+  message: string | null;
+  url: string | null;
+  status: number | null;
+};
+
+export type ScrapeSession = {
+  id: string;
+  source: Source;
+  status: "queued" | "running" | "succeeded" | "failed" | "canceled" | "needs_review" | string;
+  target_url: string;
+  browser_session_id: string;
+  started_at: string | null;
+  completed_at: string | null;
+  current_url: string | null;
+  latest_screenshot_data_url: string | null;
+  events: ScrapeSessionEvent[];
+};
+
+export type ScrapeSessionsResponse = {
+  property_id: string;
+  sessions: ScrapeSession[];
+};
+
 export type PmsProvider =
   | "guesty"
   | "hostaway"

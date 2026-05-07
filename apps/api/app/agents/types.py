@@ -14,6 +14,7 @@ class ScrapeTarget:
     stay_date_start: date
     stay_date_end: date
     proxy_url: str | None = None
+    browser_session_id: str | None = None
 
 
 @dataclass
