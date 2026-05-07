@@ -17,14 +17,28 @@ export function BrandMark({ className, title = "RentalRadar.AI" }: SVGProps<SVGS
           <stop offset="0.48" stopColor="#07111F" />
           <stop offset="1" stopColor="#050816" />
         </linearGradient>
-        <linearGradient id="brand-mark-sweep" x1="25" y1="35" x2="72" y2="12" gradientUnits="userSpaceOnUse">
+        <radialGradient id="brand-mark-radar" cx="0" cy="0" r="1" gradientTransform="matrix(24 0 0 24 31 29)" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#164E63" stopOpacity="0.72" />
+          <stop offset="0.64" stopColor="#0E7490" stopOpacity="0.18" />
+          <stop offset="1" stopColor="#020617" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="brand-mark-sweep" x1="31" y1="29" x2="61" y2="12" gradientUnits="userSpaceOnUse">
           <stop stopColor="#67E8F9" />
           <stop offset="0.56" stopColor="#22D3EE" />
           <stop offset="1" stopColor="#2DD4BF" />
         </linearGradient>
-        <linearGradient id="brand-mark-home" x1="18" y1="42" x2="43" y2="21" gradientUnits="userSpaceOnUse">
+        <linearGradient id="brand-mark-sweep-fade" x1="31" y1="29" x2="58" y2="18" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#67E8F9" stopOpacity="0.5" />
+          <stop offset="0.72" stopColor="#22D3EE" stopOpacity="0.2" />
+          <stop offset="1" stopColor="#2DD4BF" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="brand-mark-home" x1="18" y1="41" x2="44" y2="20" gradientUnits="userSpaceOnUse">
           <stop stopColor="#CFFAFE" />
           <stop offset="1" stopColor="#67E8F9" />
+        </linearGradient>
+        <linearGradient id="brand-mark-ai" x1="55" y1="38" x2="70" y2="21" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#FDE68A" />
+          <stop offset="1" stopColor="#FBBF24" />
         </linearGradient>
         <filter id="brand-mark-glow" x="-20%" y="-20%" width="140%" height="140%">
           <feGaussianBlur stdDeviation="2.4" result="blur" />
@@ -38,23 +52,22 @@ export function BrandMark({ className, title = "RentalRadar.AI" }: SVGProps<SVGS
       </defs>
       <rect width="84" height="56" rx="16" fill="url(#brand-mark-shell)" />
       <rect x="1" y="1" width="82" height="54" rx="15" fill="none" stroke="#67E8F9" strokeOpacity="0.22" />
-      <path d="M18 35a18 18 0 0 1 35.6-3.7" fill="none" stroke="#67E8F9" strokeOpacity="0.18" strokeWidth="2" />
-      <path d="M25 35a11 11 0 0 1 21.6-3" fill="none" stroke="#67E8F9" strokeOpacity="0.22" strokeWidth="1.8" />
-      <path d="M48 28c6.6-7.3 15.8-12.1 25.4-13.2" fill="none" stroke="#67E8F9" strokeOpacity="0.22" strokeLinecap="round" strokeWidth="2.2" />
-      <path
-        d="M36 33c8.9-9.7 21-16 34.6-18.2"
-        fill="none"
-        stroke="url(#brand-mark-sweep)"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="4.4"
-        filter="url(#brand-mark-glow)"
-      />
-      <path d="M17.5 33 30 22.5 42.5 33" fill="none" stroke="url(#brand-mark-home)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.4" />
-      <path d="M22 33v11h16V33" fill="none" stroke="url(#brand-mark-home)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.4" />
-      <path d="M31 44v-8h7" fill="none" stroke="#FBBF24" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.4" />
-      <circle cx="70.8" cy="14.8" r="4.4" fill="#FBBF24" />
-      <circle cx="70.8" cy="14.8" r="1.9" fill="#FFFBEB" />
+      <circle cx="31" cy="29" r="23" fill="url(#brand-mark-radar)" />
+      <circle cx="31" cy="29" r="22" fill="none" stroke="#67E8F9" strokeOpacity="0.22" strokeWidth="1.8" />
+      <circle cx="31" cy="29" r="15.5" fill="none" stroke="#67E8F9" strokeOpacity="0.2" strokeWidth="1.4" />
+      <circle cx="31" cy="29" r="8.5" fill="none" stroke="#67E8F9" strokeOpacity="0.18" strokeWidth="1.2" />
+      <path d="M31 7v44M9 29h44" stroke="#67E8F9" strokeOpacity="0.12" strokeWidth="1" />
+      <path d="M31 29 53 11a28 28 0 0 1 6 23Z" fill="url(#brand-mark-sweep-fade)" filter="url(#brand-mark-glow)" />
+      <path d="M45 13.5a22 22 0 0 1 8 9.5" stroke="url(#brand-mark-sweep)" strokeLinecap="round" strokeWidth="2.4" filter="url(#brand-mark-glow)" />
+      <path d="M18.5 31.5 31 21.2l12.5 10.3" fill="none" stroke="url(#brand-mark-home)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.4" />
+      <path d="M22.8 31.8v12.4h16.4V31.8" fill="#07111F" fillOpacity="0.78" stroke="url(#brand-mark-home)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.4" />
+      <path d="M31 44.2v-8.4h7.2" fill="none" stroke="url(#brand-mark-ai)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.4" />
+      <circle cx="31" cy="29" r="2.4" fill="#67E8F9" filter="url(#brand-mark-glow)" />
+      <path d="M55.5 33.5 63 26l7.5 7.5" fill="none" stroke="url(#brand-mark-ai)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+      <circle cx="55.5" cy="33.5" r="3" fill="#22D3EE" />
+      <circle cx="63" cy="26" r="3.2" fill="#FBBF24" />
+      <circle cx="70.5" cy="33.5" r="3" fill="#2DD4BF" />
+      <circle cx="63" cy="26" r="1.2" fill="#FFFBEB" />
     </svg>
   );
 }
