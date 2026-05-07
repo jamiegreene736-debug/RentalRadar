@@ -10,6 +10,7 @@ from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi import Query
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -19,20 +20,34 @@ from app.db.session import get_db
 from app.deps import RequestContext, get_request_context
 from app.schemas import (
     AddressPropertyCreate,
+    AddressSuggestionResponse,
     MarketRatesResponse,
+    MonthlyRateForecastResponse,
     PricingRecommendationResponse,
     PropertyResponse,
+    RateForecastNightResponse,
+    RateForecastResponse,
     RateObservationResponse,
     ScrapeSessionEventResponse,
     ScrapeSessionResponse,
     ScrapeSessionsResponse,
 )
 from app.services.cache import JsonCache
+from app.services.forecast import build_rate_forecast
+from app.services.geocoding import suggest_addresses
 from app.services.market import create_property_and_jobs, get_market_rates
 from app.services.usage import BillingRequired, UsageLimitExceeded, ensure_property_allowed, require_usage_allowance
 from app.workers.tasks import run_scrape_job
 
 router = APIRouter(tags=["properties"])
+
+
+@router.get("/address-suggestions", response_model=list[AddressSuggestionResponse])
+async def address_suggestions(
+    query: str = Query(min_length=3, max_length=160),
+    limit: int = Query(default=5, ge=1, le=8),
+) -> list[AddressSuggestionResponse]:
+    return [AddressSuggestionResponse(**item) for item in await suggest_addresses(query, limit=limit)]
 
 
 @router.post("/properties", response_model=PropertyResponse, status_code=201)
@@ -151,6 +166,63 @@ def market_rates(
     )
     cache.set(cache_key, response.model_dump(mode="json") | {"cached": False}, ttl_seconds=120)
     return response
+
+
+@router.get("/properties/{property_id}/rate-forecast", response_model=RateForecastResponse)
+def rate_forecast(
+    property_id: UUID,
+    months: int = Query(default=6, ge=6, le=24),
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> RateForecastResponse:
+    rental = db.scalar(
+        select(Property)
+        .where(Property.id == property_id)
+        .where(Property.organization_id == context.organization_id)
+    )
+    if rental is None:
+        raise HTTPException(status_code=404, detail="Property not found")
+
+    observations, recommendations = get_market_rates(db, property_id)
+    forecast = build_rate_forecast(rental, recommendations, observations, months)
+    return RateForecastResponse(
+        property_id=property_id,
+        months=months,
+        currency_code=rental.currency_code,
+        address=rental.formatted_address,
+        generated_at=forecast.generated_at,
+        estimated_occupancy=forecast.estimated_occupancy,
+        recommended_total_revenue_cents=forecast.recommended_total_revenue_cents,
+        beyond_pricing_total_revenue_cents=forecast.beyond_pricing_total_revenue_cents,
+        extra_income_vs_beyond_cents=forecast.extra_income_vs_beyond_cents,
+        confidence=forecast.confidence,
+        explanation=forecast.explanation,
+        monthly=[
+            MonthlyRateForecastResponse(
+                month=month.month,
+                average_recommended_rate_cents=month.average_recommended_rate_cents,
+                average_beyond_pricing_rate_cents=month.average_beyond_pricing_rate_cents,
+                average_wheelhouse_style_rate_cents=month.average_wheelhouse_style_rate_cents,
+                estimated_occupancy=month.estimated_occupancy,
+                estimated_revenue_cents=month.estimated_revenue_cents,
+                beyond_pricing_revenue_cents=month.beyond_pricing_revenue_cents,
+                extra_income_vs_beyond_cents=month.extra_income_vs_beyond_cents,
+            )
+            for month in forecast.monthly
+        ],
+        nights=[
+            RateForecastNightResponse(
+                stay_date=night.stay_date,
+                recommended_rate_cents=night.recommended_rate_cents,
+                beyond_pricing_rate_cents=night.beyond_pricing_rate_cents,
+                wheelhouse_style_rate_cents=night.wheelhouse_style_rate_cents,
+                estimated_occupancy=night.estimated_occupancy,
+                estimated_revenue_cents=night.estimated_revenue_cents,
+                confidence=night.confidence,
+            )
+            for night in forecast.nights
+        ],
+    )
 
 
 @router.get("/properties/{property_id}/scrape-sessions", response_model=ScrapeSessionsResponse)

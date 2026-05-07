@@ -18,7 +18,7 @@ const sourceLabels: Record<string, string> = {
   other: "Web",
 };
 
-export function LiveScrapeScreens({ propertyId }: { propertyId?: string }) {
+export function LiveScrapeScreens({ propertyId, pending = false }: { propertyId?: string; pending?: boolean }) {
   const [sessions, setSessions] = useState<ScrapeSession[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "live" | "error">("idle");
 
@@ -60,7 +60,7 @@ export function LiveScrapeScreens({ propertyId }: { propertyId?: string }) {
     };
   }, [propertyId]);
 
-  if (!propertyId) return null;
+  if (!propertyId && !pending) return null;
 
   const activeCount = sessions.filter((session) => ["queued", "running"].includes(session.status)).length;
 
@@ -74,7 +74,11 @@ export function LiveScrapeScreens({ propertyId }: { propertyId?: string }) {
           <div>
             <p className="font-semibold text-white">Live Google Chrome scrape</p>
             <p className="text-sm text-slate-400">
-              {activeCount ? `${activeCount} tab${activeCount === 1 ? "" : "s"} active` : "Watching the latest rate search"}
+              {propertyId
+                ? activeCount
+                  ? `${activeCount} tab${activeCount === 1 ? "" : "s"} active`
+                  : "Watching the latest rate search"
+                : "Preparing Airbnb, VRBO, and Booking.com tabs"}
             </p>
           </div>
         </div>
@@ -86,8 +90,8 @@ export function LiveScrapeScreens({ propertyId }: { propertyId?: string }) {
               : "border-cyan-200/20 bg-cyan-300/10 text-cyan-100",
           )}
         >
-          {status === "loading" ? <LoaderCircle className="size-3.5 animate-spin" /> : <Circle className="size-2 fill-current" />}
-          {status === "error" ? "Preview unavailable" : status === "loading" ? "Opening tabs" : "Live"}
+          {status === "loading" || pending ? <LoaderCircle className="size-3.5 animate-spin" /> : <Circle className="size-2 fill-current" />}
+          {status === "error" ? "Preview unavailable" : status === "loading" || pending ? "Opening tabs" : "Live"}
         </span>
       </div>
 

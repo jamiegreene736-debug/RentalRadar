@@ -12,6 +12,18 @@ export type PropertyResponse = {
   market_scan_job_ids: string[];
 };
 
+export type AddressSuggestion = {
+  place_id: string;
+  formatted_address: string;
+  address_line1: string | null;
+  city: string | null;
+  region: string | null;
+  postal_code: string | null;
+  country_code: string;
+  latitude: number | null;
+  longitude: number | null;
+};
+
 export type RateObservation = {
   id: string;
   source: Source;
@@ -89,6 +101,43 @@ export type ScrapeSession = {
 export type ScrapeSessionsResponse = {
   property_id: string;
   sessions: ScrapeSession[];
+};
+
+export type RateForecastNight = {
+  stay_date: string;
+  recommended_rate_cents: number;
+  beyond_pricing_rate_cents: number;
+  wheelhouse_style_rate_cents: number;
+  estimated_occupancy: number;
+  estimated_revenue_cents: number;
+  confidence: number;
+};
+
+export type MonthlyRateForecast = {
+  month: string;
+  average_recommended_rate_cents: number;
+  average_beyond_pricing_rate_cents: number;
+  average_wheelhouse_style_rate_cents: number;
+  estimated_occupancy: number;
+  estimated_revenue_cents: number;
+  beyond_pricing_revenue_cents: number;
+  extra_income_vs_beyond_cents: number;
+};
+
+export type RateForecastResponse = {
+  property_id: string;
+  months: number;
+  currency_code: string;
+  address: string | null;
+  generated_at: string;
+  estimated_occupancy: number;
+  recommended_total_revenue_cents: number;
+  beyond_pricing_total_revenue_cents: number;
+  extra_income_vs_beyond_cents: number;
+  confidence: number;
+  explanation: string;
+  monthly: MonthlyRateForecast[];
+  nights: RateForecastNight[];
 };
 
 export type PmsProvider =

@@ -43,6 +43,18 @@ class PropertyResponse(BaseModel):
     market_scan_job_ids: list[UUID]
 
 
+class AddressSuggestionResponse(BaseModel):
+    place_id: str
+    formatted_address: str
+    address_line1: str | None = None
+    city: str | None = None
+    region: str | None = None
+    postal_code: str | None = None
+    country_code: str = "US"
+    latitude: float | None = None
+    longitude: float | None = None
+
+
 class RateObservationResponse(BaseModel):
     id: UUID
     source: ScrapeSource
@@ -99,6 +111,43 @@ class ScrapeSessionResponse(BaseModel):
 class ScrapeSessionsResponse(BaseModel):
     property_id: UUID
     sessions: list[ScrapeSessionResponse]
+
+
+class RateForecastNightResponse(BaseModel):
+    stay_date: date
+    recommended_rate_cents: int
+    beyond_pricing_rate_cents: int
+    wheelhouse_style_rate_cents: int
+    estimated_occupancy: float
+    estimated_revenue_cents: int
+    confidence: float
+
+
+class MonthlyRateForecastResponse(BaseModel):
+    month: date
+    average_recommended_rate_cents: int
+    average_beyond_pricing_rate_cents: int
+    average_wheelhouse_style_rate_cents: int
+    estimated_occupancy: float
+    estimated_revenue_cents: int
+    beyond_pricing_revenue_cents: int
+    extra_income_vs_beyond_cents: int
+
+
+class RateForecastResponse(BaseModel):
+    property_id: UUID
+    months: int
+    currency_code: str
+    address: str | None
+    generated_at: datetime
+    estimated_occupancy: float
+    recommended_total_revenue_cents: int
+    beyond_pricing_total_revenue_cents: int
+    extra_income_vs_beyond_cents: int
+    confidence: float
+    explanation: str
+    monthly: list[MonthlyRateForecastResponse]
+    nights: list[RateForecastNightResponse]
 
 
 class PmsConnectRequest(BaseModel):
