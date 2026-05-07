@@ -9,6 +9,42 @@ from pydantic import BaseModel, Field, HttpUrl, field_validator
 from app.db.models import OtaDirectPlatform, OtaDirectStatus, PmsProvider, ScrapeSource
 
 
+class AccountProfileUpdate(BaseModel):
+    email: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    phone_number: str | None = None
+    company_name: str | None = None
+    job_title: str | None = None
+    timezone: str = Field(default="America/New_York", min_length=1)
+    locale: str = Field(default="en-US", min_length=2)
+    notification_email: str | None = None
+    marketing_opt_in: bool = False
+    avatar_url: str | None = None
+    clerk_user_id: str | None = None
+
+
+class AccountProfileResponse(BaseModel):
+    id: UUID
+    email: str
+    first_name: str | None = None
+    last_name: str | None = None
+    full_name: str | None = None
+    avatar_url: str | None = None
+    phone_number: str | None = None
+    company_name: str | None = None
+    job_title: str | None = None
+    timezone: str
+    locale: str
+    notification_email: str | None = None
+    marketing_opt_in: bool
+    profile_completed_at: datetime | None = None
+    clerk_user_id: str | None = None
+    default_organization_id: UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class AddressPropertyCreate(BaseModel):
     address: str = Field(min_length=6)
     name: str | None = None
@@ -148,6 +184,53 @@ class RateForecastResponse(BaseModel):
     explanation: str
     monthly: list[MonthlyRateForecastResponse]
     nights: list[RateForecastNightResponse]
+
+
+class TargetOccupancyPlanRequest(BaseModel):
+    target_month: date
+    target_occupancy: float = Field(default=0.9, ge=0.05, le=0.98)
+    refresh_browser_data: bool = True
+
+    @field_validator("target_month")
+    @classmethod
+    def normalize_target_month(cls, value: date) -> date:
+        return date(value.year, value.month, 1)
+
+
+class TargetOccupancyNightResponse(BaseModel):
+    stay_date: date
+    suggested_rate_cents: int
+    market_rate_cents: int
+    expected_occupancy: float
+    strategy: str
+
+
+class BrowserEvidenceResponse(BaseModel):
+    status: str
+    queued_job_ids: list[UUID]
+    completed_scan_count: int
+    observations_used: int
+    latest_observed_at: datetime | None
+    sources: list[str]
+    message: str
+
+
+class TargetOccupancyPlanResponse(BaseModel):
+    property_id: UUID
+    currency_code: str
+    address: str | None
+    generated_at: datetime
+    target_month: date
+    target_occupancy: float
+    current_projected_occupancy: float
+    suggested_average_rate_cents: int
+    market_average_rate_cents: int
+    rate_change_percent: float
+    projected_revenue_cents: int
+    confidence: float
+    game_plan: list[str]
+    browser_evidence: BrowserEvidenceResponse
+    nights: list[TargetOccupancyNightResponse]
 
 
 class PmsConnectRequest(BaseModel):

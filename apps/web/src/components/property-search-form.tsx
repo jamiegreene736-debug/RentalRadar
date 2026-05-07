@@ -7,6 +7,7 @@ import { addPropertyAction } from "@/app/actions";
 import { SubmitButton } from "@/components/action-status";
 import { LiveScrapeScreens } from "@/components/live-scrape-screens";
 import { RateForecastResults } from "@/components/rate-forecast-results";
+import { TargetOccupancyPlanner } from "@/components/target-occupancy-planner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -177,6 +178,7 @@ export function PropertySearchForm() {
           </div>
         </form>
         <LiveScrapeScreens propertyId={propertyId} pending={analysisStarted && !propertyId && !state.message} />
+        <TargetOccupancyPlanner propertyId={propertyId} compact />
         <RateForecastResults propertyId={propertyId} />
       </CardContent>
     </Card>

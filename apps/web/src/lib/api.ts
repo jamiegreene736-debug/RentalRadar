@@ -2,11 +2,13 @@ import "server-only";
 
 import {
   BillingSessionResponse,
+  AccountProfileResponse,
   ErrorDashboardResponse,
   MarketRatesResponse,
   OtaDirectStatusResponse,
   PropertyResponse,
   ScrapingLegalNoticeResponse,
+  TargetOccupancyPlanResponse,
   UsageSummaryResponse,
 } from "@/lib/types";
 import { fetchBackend, ORG_ID, USER_ID } from "@/lib/backend-api";
@@ -48,6 +50,16 @@ export async function createProperty(payload: {
   });
 }
 
+export async function getProperties(): Promise<PropertyResponse[]> {
+  try {
+    return await apiFetch<PropertyResponse[]>("/properties", {
+      next: { revalidate: 20 },
+    });
+  } catch {
+    return [];
+  }
+}
+
 export async function getMarketRates(propertyId: string): Promise<MarketRatesResponse> {
   try {
     return await apiFetch<MarketRatesResponse>(`/properties/${propertyId}/market-rates`, {
@@ -61,6 +73,20 @@ export async function getMarketRates(propertyId: string): Promise<MarketRatesRes
       recommendations: [],
     };
   }
+}
+
+export async function buildTargetOccupancyPlan(
+  propertyId: string,
+  payload: {
+    target_month: string;
+    target_occupancy: number;
+    refresh_browser_data?: boolean;
+  },
+): Promise<TargetOccupancyPlanResponse> {
+  return apiFetch<TargetOccupancyPlanResponse>(`/properties/${propertyId}/target-occupancy-plan`, {
+    method: "POST",
+    json: { refresh_browser_data: true, ...payload },
+  });
 }
 
 export async function runPricing(propertyId: string) {
@@ -173,6 +199,36 @@ export async function getErrorDashboard(): Promise<ErrorDashboardResponse | null
   } catch {
     return null;
   }
+}
+
+export async function getAccountProfile(): Promise<AccountProfileResponse | null> {
+  try {
+    return await apiFetch<AccountProfileResponse>("/account/profile", {
+      next: { revalidate: 30 },
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function updateAccountProfile(payload: {
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  phone_number?: string;
+  company_name?: string;
+  job_title?: string;
+  timezone?: string;
+  locale?: string;
+  notification_email?: string;
+  marketing_opt_in?: boolean;
+  avatar_url?: string;
+  clerk_user_id?: string;
+}): Promise<AccountProfileResponse> {
+  return apiFetch<AccountProfileResponse>("/account/profile", {
+    method: "PATCH",
+    json: payload,
+  });
 }
 
 export { ORG_ID };

@@ -140,6 +140,42 @@ export type RateForecastResponse = {
   nights: RateForecastNight[];
 };
 
+export type TargetOccupancyNight = {
+  stay_date: string;
+  suggested_rate_cents: number;
+  market_rate_cents: number;
+  expected_occupancy: number;
+  strategy: string;
+};
+
+export type BrowserEvidence = {
+  status: string;
+  queued_job_ids: string[];
+  completed_scan_count: number;
+  observations_used: number;
+  latest_observed_at: string | null;
+  sources: string[];
+  message: string;
+};
+
+export type TargetOccupancyPlanResponse = {
+  property_id: string;
+  currency_code: string;
+  address: string | null;
+  generated_at: string;
+  target_month: string;
+  target_occupancy: number;
+  current_projected_occupancy: number;
+  suggested_average_rate_cents: number;
+  market_average_rate_cents: number;
+  rate_change_percent: number;
+  projected_revenue_cents: number;
+  confidence: number;
+  game_plan: string[];
+  browser_evidence: BrowserEvidence;
+  nights: TargetOccupancyNight[];
+};
+
 export type PmsProvider =
   | "guesty"
   | "hostaway"
@@ -179,6 +215,27 @@ export type ActionState = {
   ok: boolean;
   message: string;
   propertyId?: string;
+};
+
+export type AccountProfileResponse = {
+  id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  phone_number: string | null;
+  company_name: string | null;
+  job_title: string | null;
+  timezone: string;
+  locale: string;
+  notification_email: string | null;
+  marketing_opt_in: boolean;
+  profile_completed_at: string | null;
+  clerk_user_id: string | null;
+  default_organization_id: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type Plan = {

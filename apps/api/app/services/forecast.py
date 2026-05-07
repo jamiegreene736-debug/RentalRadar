@@ -5,6 +5,8 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from statistics import median
+from uuid import UUID
 
 from app.db.models import PricingRecommendation, Property, RateObservation
 
@@ -43,6 +45,42 @@ class ForecastResult:
     explanation: str
     monthly: list[MonthlyForecast]
     nights: list[ForecastNight]
+
+
+@dataclass(frozen=True)
+class BrowserEvidence:
+    status: str
+    queued_job_ids: list[UUID]
+    completed_scan_count: int
+    observations_used: int
+    latest_observed_at: datetime | None
+    sources: list[str]
+    message: str
+
+
+@dataclass(frozen=True)
+class TargetOccupancyNight:
+    stay_date: date
+    suggested_rate_cents: int
+    market_rate_cents: int
+    expected_occupancy: float
+    strategy: str
+
+
+@dataclass(frozen=True)
+class TargetOccupancyPlan:
+    generated_at: datetime
+    target_month: date
+    target_occupancy: float
+    current_projected_occupancy: float
+    suggested_average_rate_cents: int
+    market_average_rate_cents: int
+    rate_change_percent: float
+    projected_revenue_cents: int
+    confidence: float
+    game_plan: list[str]
+    browser_evidence: BrowserEvidence
+    nights: list[TargetOccupancyNight]
 
 
 def build_rate_forecast(
@@ -114,6 +152,102 @@ def build_rate_forecast(
             "market benchmark, not a third-party account pull."
         ),
         monthly=monthly,
+        nights=nights,
+    )
+
+
+def build_target_occupancy_plan(
+    rental: Property,
+    recommendations: list[PricingRecommendation],
+    observations: list[RateObservation],
+    target_month: date,
+    target_occupancy: float,
+    queued_job_ids: list[UUID],
+    completed_scan_count: int,
+) -> TargetOccupancyPlan:
+    month = date(target_month.year, target_month.month, 1)
+    next_month = date(month.year + 1, 1, 1) if month.month == 12 else date(month.year, month.month + 1, 1)
+    rec_by_date = _recommendations_by_date(recommendations)
+    observations_by_date = _observations_by_date(observations)
+    address_seed = _seed(rental.formatted_address or rental.address_line1 or str(rental.id))
+    property_seed = _seed(f"{rental.id}:{rental.bedrooms}:{rental.sleeps}:target")
+    base_rate = _base_rate_cents(rental, observations, address_seed)
+
+    nights: list[TargetOccupancyNight] = []
+    current_occupancies: list[float] = []
+    current_rates: list[int] = []
+    market_rates: list[int] = []
+    day = month
+    while day < next_month:
+        live_rates = observations_by_date.get(day, [])
+        market_rate = round(median(live_rates)) if live_rates else _modeled_rate(
+            base_rate=base_rate,
+            stay_date=day,
+            address_seed=address_seed,
+            property_seed=property_seed,
+            premium=False,
+        )
+        current_rate = rec_by_date.get(day).recommended_rate_cents if rec_by_date.get(day) else _modeled_rate(
+            base_rate=market_rate,
+            stay_date=day,
+            address_seed=address_seed,
+            property_seed=property_seed,
+            premium=True,
+        )
+        current_occupancy = _estimated_occupancy(day, address_seed, property_seed, current_rate, market_rate)
+        occupancy_gap = target_occupancy - current_occupancy
+        suggested_rate = _target_rate(
+            current_rate=current_rate,
+            market_rate=market_rate,
+            target_occupancy=target_occupancy,
+            current_occupancy=current_occupancy,
+            min_rate=rental.min_price_cents,
+            max_rate=rental.max_price_cents,
+        )
+        expected_occupancy = _estimated_occupancy(day, address_seed, property_seed, suggested_rate, market_rate)
+        nights.append(
+            TargetOccupancyNight(
+                stay_date=day,
+                suggested_rate_cents=suggested_rate,
+                market_rate_cents=market_rate,
+                expected_occupancy=expected_occupancy,
+                strategy=_night_strategy(day, occupancy_gap, suggested_rate, market_rate),
+            )
+        )
+        current_occupancies.append(current_occupancy)
+        current_rates.append(current_rate)
+        market_rates.append(market_rate)
+        day += timedelta(days=1)
+
+    average_current_rate = round(sum(current_rates) / len(current_rates)) if current_rates else base_rate
+    suggested_average = round(sum(night.suggested_rate_cents for night in nights) / len(nights)) if nights else base_rate
+    market_average = round(sum(market_rates) / len(market_rates)) if market_rates else base_rate
+    current_projected_occupancy = (
+        round(sum(current_occupancies) / len(current_occupancies), 4) if current_occupancies else 0
+    )
+    projected_revenue = sum(round(night.suggested_rate_cents * night.expected_occupancy) for night in nights)
+    confidence = _target_confidence(recommendations, observations, completed_scan_count, queued_job_ids)
+    evidence = _browser_evidence(observations, queued_job_ids, completed_scan_count)
+
+    return TargetOccupancyPlan(
+        generated_at=datetime.now(timezone.utc),
+        target_month=month,
+        target_occupancy=round(target_occupancy, 4),
+        current_projected_occupancy=current_projected_occupancy,
+        suggested_average_rate_cents=suggested_average,
+        market_average_rate_cents=market_average,
+        rate_change_percent=round((suggested_average - average_current_rate) / max(average_current_rate, 1), 4),
+        projected_revenue_cents=projected_revenue,
+        confidence=confidence,
+        game_plan=_game_plan(
+            month=month,
+            target_occupancy=target_occupancy,
+            current_projected_occupancy=current_projected_occupancy,
+            suggested_average=suggested_average,
+            market_average=market_average,
+            evidence=evidence,
+        ),
+        browser_evidence=evidence,
         nights=nights,
     )
 
@@ -233,6 +367,114 @@ def _confidence(recommendations: list[PricingRecommendation], observations: list
     recommendation_score = min(0.22, len(recommendations) / 365 * 0.22)
     observation_score = min(0.24, len(observations) / 180 * 0.24)
     return round(0.54 + recommendation_score + observation_score, 4)
+
+
+def _target_rate(
+    *,
+    current_rate: int,
+    market_rate: int,
+    target_occupancy: float,
+    current_occupancy: float,
+    min_rate: int | None,
+    max_rate: int | None,
+) -> int:
+    occupancy_gap = target_occupancy - current_occupancy
+    if occupancy_gap > 0:
+        market_anchor = market_rate * (0.92 - min(0.18, occupancy_gap * 0.8))
+        current_anchor = current_rate * (1 - min(0.24, occupancy_gap * 0.95))
+        rate = round(min(market_anchor, current_anchor))
+    else:
+        market_anchor = market_rate * (1 + min(0.10, abs(occupancy_gap) * 0.45))
+        current_anchor = current_rate * (1 + min(0.08, abs(occupancy_gap) * 0.35))
+        rate = round(max(market_anchor, current_anchor))
+    return _clamp(rate, min_rate, max_rate)
+
+
+def _clamp(value: int, minimum: int | None, maximum: int | None) -> int:
+    if minimum is not None:
+        value = max(value, minimum)
+    if maximum is not None:
+        value = min(value, maximum)
+    return max(1, value)
+
+
+def _target_confidence(
+    recommendations: list[PricingRecommendation],
+    observations: list[RateObservation],
+    completed_scan_count: int,
+    queued_job_ids: list[UUID],
+) -> float:
+    base = _confidence(recommendations, observations)
+    browser_boost = min(0.12, completed_scan_count * 0.025)
+    refresh_penalty = 0 if not queued_job_ids else 0.03
+    return round(max(0.35, min(0.97, base + browser_boost - refresh_penalty)), 4)
+
+
+def _browser_evidence(
+    observations: list[RateObservation],
+    queued_job_ids: list[UUID],
+    completed_scan_count: int,
+) -> BrowserEvidence:
+    latest = max((row.observed_at for row in observations), default=None)
+    sources = sorted({row.source.value if hasattr(row.source, "value") else str(row.source) for row in observations})
+    if queued_job_ids:
+        status = "refresh_queued"
+        message = (
+            "Fresh headed Chrome scans were queued for this target month. The plan uses current browser evidence now "
+            "and can tighten after those sessions finish."
+        )
+    elif observations:
+        status = "live_browser_evidence"
+        message = "Plan uses the latest completed headed-browser rate observations already stored for this property."
+    else:
+        status = "modeled_pending_browser_data"
+        message = "No completed browser observations are available yet, so RentalRadar queued browser work and filled the first plan with modeled seasonality."
+    return BrowserEvidence(
+        status=status,
+        queued_job_ids=queued_job_ids,
+        completed_scan_count=completed_scan_count,
+        observations_used=len(observations),
+        latest_observed_at=latest,
+        sources=sources,
+        message=message,
+    )
+
+
+def _night_strategy(day: date, occupancy_gap: float, suggested_rate: int, market_rate: int) -> str:
+    market_position = (suggested_rate - market_rate) / max(market_rate, 1)
+    if occupancy_gap > 0.1:
+        return "Price for conversion and keep friction low"
+    if day.weekday() in (4, 5) and market_position > -0.04:
+        return "Protect weekend ADR while watching pickup"
+    if market_position < -0.1:
+        return "Undercut soft comp set until pacing improves"
+    return "Hold near market and recheck after the browser refresh"
+
+
+def _game_plan(
+    *,
+    month: date,
+    target_occupancy: float,
+    current_projected_occupancy: float,
+    suggested_average: int,
+    market_average: int,
+    evidence: BrowserEvidence,
+) -> list[str]:
+    month_label = month.strftime("%B %Y")
+    market_position = (suggested_average - market_average) / max(market_average, 1)
+    plan = [
+        f"Aim for {target_occupancy:.0%} occupancy in {month_label} by opening with an average nightly rate around ${suggested_average / 100:,.0f}.",
+        f"Current pacing projects about {current_projected_occupancy:.0%}; the suggested rate sits {abs(market_position):.0%} {'below' if market_position < 0 else 'above'} the headed-browser comp average.",
+    ]
+    if target_occupancy - current_projected_occupancy > 0.08:
+        plan.append("Use a lower weekday rate first, protect prime weekends, and review pickup every 48 hours until the occupancy gap closes.")
+    else:
+        plan.append("Hold close to market on weekends and use small weekday adjustments instead of broad discounting.")
+    if evidence.queued_job_ids:
+        plan.append("Fresh headed-browser scans are queued for this target month; re-run the plan when those sessions complete before pushing final rates.")
+    else:
+        plan.append("Use this as the push-ready plan, then re-run after each new browser scan or PMS pickup signal.")
+    return plan
 
 
 def _seed(value: str) -> float:

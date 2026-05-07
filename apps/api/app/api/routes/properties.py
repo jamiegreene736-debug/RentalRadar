@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from decimal import Decimal
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -15,7 +15,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.db.models import Property, ScrapeJob, ScrapeJobLog
+from app.db.models import Competitor, Property, ScrapeJob, ScrapeJobLog, ScrapeJobStatus
 from app.db.session import get_db
 from app.deps import RequestContext, get_request_context
 from app.schemas import (
@@ -31,11 +31,15 @@ from app.schemas import (
     ScrapeSessionEventResponse,
     ScrapeSessionResponse,
     ScrapeSessionsResponse,
+    BrowserEvidenceResponse,
+    TargetOccupancyNightResponse,
+    TargetOccupancyPlanRequest,
+    TargetOccupancyPlanResponse,
 )
 from app.services.cache import JsonCache
-from app.services.forecast import build_rate_forecast
+from app.services.forecast import build_rate_forecast, build_target_occupancy_plan
 from app.services.geocoding import suggest_addresses
-from app.services.market import create_property_and_jobs, get_market_rates
+from app.services.market import create_property_and_jobs, default_market_targets, get_market_rates, infer_source
 from app.services.usage import BillingRequired, UsageLimitExceeded, ensure_property_allowed, require_usage_allowance
 from app.workers.tasks import run_scrape_job
 
@@ -109,6 +113,34 @@ def create_property(
         sleeps=rental.sleeps,
         market_scan_job_ids=[job.id for job in jobs],
     )
+
+
+@router.get("/properties", response_model=list[PropertyResponse])
+def list_properties(
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> list[PropertyResponse]:
+    rentals = db.scalars(
+        select(Property)
+        .where(Property.organization_id == context.organization_id)
+        .where(Property.active.is_(True))
+        .order_by(desc(Property.created_at))
+        .limit(100)
+    ).all()
+    return [
+        PropertyResponse(
+            id=rental.id,
+            organization_id=rental.organization_id,
+            name=rental.name,
+            formatted_address=rental.formatted_address,
+            address_line1=rental.address_line1,
+            bedrooms=rental.bedrooms,
+            bathrooms=_float_or_none(rental.bathrooms),
+            sleeps=rental.sleeps,
+            market_scan_job_ids=[],
+        )
+        for rental in rentals
+    ]
 
 
 @router.get("/properties/{property_id}/market-rates", response_model=MarketRatesResponse)
@@ -225,6 +257,83 @@ def rate_forecast(
     )
 
 
+@router.post("/properties/{property_id}/target-occupancy-plan", response_model=TargetOccupancyPlanResponse)
+def target_occupancy_plan(
+    property_id: UUID,
+    payload: TargetOccupancyPlanRequest,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> TargetOccupancyPlanResponse:
+    rental = db.scalar(
+        select(Property)
+        .where(Property.id == property_id)
+        .where(Property.organization_id == context.organization_id)
+    )
+    if rental is None:
+        raise HTTPException(status_code=404, detail="Property not found")
+
+    queued_job_ids: list[UUID] = []
+    if payload.refresh_browser_data:
+        queued_job_ids = _queue_target_month_browser_scans(
+            db=db,
+            rental=rental,
+            target_month=payload.target_month,
+            context=context,
+        )
+
+    observations, recommendations = get_market_rates(db, property_id)
+    completed_scan_count = len(
+        db.scalars(
+            select(ScrapeJob.id)
+            .where(ScrapeJob.property_id == property_id)
+            .where(ScrapeJob.status == ScrapeJobStatus.succeeded)
+        ).all()
+    )
+    plan = build_target_occupancy_plan(
+        rental=rental,
+        recommendations=recommendations,
+        observations=observations,
+        target_month=payload.target_month,
+        target_occupancy=payload.target_occupancy,
+        queued_job_ids=queued_job_ids,
+        completed_scan_count=completed_scan_count,
+    )
+    return TargetOccupancyPlanResponse(
+        property_id=property_id,
+        currency_code=rental.currency_code,
+        address=rental.formatted_address,
+        generated_at=plan.generated_at,
+        target_month=plan.target_month,
+        target_occupancy=plan.target_occupancy,
+        current_projected_occupancy=plan.current_projected_occupancy,
+        suggested_average_rate_cents=plan.suggested_average_rate_cents,
+        market_average_rate_cents=plan.market_average_rate_cents,
+        rate_change_percent=plan.rate_change_percent,
+        projected_revenue_cents=plan.projected_revenue_cents,
+        confidence=plan.confidence,
+        game_plan=plan.game_plan,
+        browser_evidence=BrowserEvidenceResponse(
+            status=plan.browser_evidence.status,
+            queued_job_ids=plan.browser_evidence.queued_job_ids,
+            completed_scan_count=plan.browser_evidence.completed_scan_count,
+            observations_used=plan.browser_evidence.observations_used,
+            latest_observed_at=plan.browser_evidence.latest_observed_at,
+            sources=plan.browser_evidence.sources,
+            message=plan.browser_evidence.message,
+        ),
+        nights=[
+            TargetOccupancyNightResponse(
+                stay_date=night.stay_date,
+                suggested_rate_cents=night.suggested_rate_cents,
+                market_rate_cents=night.market_rate_cents,
+                expected_occupancy=night.expected_occupancy,
+                strategy=night.strategy,
+            )
+            for night in plan.nights
+        ],
+    )
+
+
 @router.get("/properties/{property_id}/scrape-sessions", response_model=ScrapeSessionsResponse)
 def scrape_sessions(
     property_id: UUID,
@@ -250,6 +359,70 @@ def scrape_sessions(
         property_id=property_id,
         sessions=[_scrape_session_response(db, job) for job in jobs],
     )
+
+
+def _queue_target_month_browser_scans(
+    *,
+    db: Session,
+    rental: Property,
+    target_month: date,
+    context: RequestContext,
+) -> list[UUID]:
+    month_start = date(target_month.year, target_month.month, 1)
+    month_end = date(month_start.year + 1, 1, 1) if month_start.month == 12 else date(month_start.year, month_start.month + 1, 1)
+    competitors = list(
+        db.scalars(
+            select(Competitor)
+            .where(Competitor.property_id == rental.id)
+            .where(Competitor.active.is_(True))
+            .order_by(desc(Competitor.updated_at))
+            .limit(8)
+        ).all()
+    )
+    targets = [(competitor.external_url, competitor.source, competitor.id) for competitor in competitors]
+    if not targets:
+        address = rental.formatted_address or rental.address_line1
+        targets = [(url, infer_source(url), None) for url in default_market_targets(address)]
+
+    jobs: list[ScrapeJob] = []
+    for target_url, source, competitor_id in targets:
+        try:
+            require_usage_allowance(
+                db,
+                context.organization_id,
+                "scrape_job",
+                property_id=rental.id,
+                source="target_occupancy_plan",
+                idempotency_key=f"target_occupancy:{rental.id}:{month_start.isoformat()}:{target_url}",
+            )
+        except BillingRequired as exc:
+            raise HTTPException(status_code=402, detail=str(exc)) from exc
+        except UsageLimitExceeded as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
+
+        job = ScrapeJob(
+            organization_id=context.organization_id,
+            property_id=rental.id,
+            competitor_id=competitor_id,
+            source=source,
+            target_url=target_url,
+            stay_date_start=month_start,
+            stay_date_end=month_end - timedelta(days=1),
+            status=ScrapeJobStatus.queued,
+            priority=15,
+            request_context={
+                "trigger": "target_occupancy_plan",
+                "target_month": month_start.isoformat(),
+            },
+        )
+        db.add(job)
+        jobs.append(job)
+
+    db.commit()
+    for job in jobs:
+        db.refresh(job)
+        run_scrape_job.delay(str(job.id))
+    return [job.id for job in jobs]
 
 
 def _float_or_none(value: Decimal | float | None) -> float | None:
