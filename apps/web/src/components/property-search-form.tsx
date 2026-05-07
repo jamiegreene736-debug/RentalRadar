@@ -5,6 +5,7 @@ import { MapPin, Plus } from "lucide-react";
 
 import { addPropertyAction } from "@/app/actions";
 import { SubmitButton } from "@/components/action-status";
+import { LiveScrapeScreens } from "@/components/live-scrape-screens";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -83,6 +84,7 @@ export function PropertySearchForm() {
             </SubmitButton>
           </div>
         </form>
+        <LiveScrapeScreens propertyId={state.propertyId} />
       </CardContent>
     </Card>
   );

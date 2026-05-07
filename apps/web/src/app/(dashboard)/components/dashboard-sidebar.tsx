@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Activity, Bot, Building2, ChevronLeft, LayoutDashboard, PlugZap, Radar, Settings } from "lucide-react";
+import { Activity, Bot, Building2, ChevronLeft, LayoutDashboard, PlugZap, Settings } from "lucide-react";
 import { useState } from "react";
 
+import { BrandLogo } from "@/components/brand-logo";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -27,15 +28,11 @@ export function DashboardSidebar() {
     >
       <div className="flex items-center justify-between">
         <Link href="/dashboard" className="flex items-center gap-3">
-          <span className="grid size-11 place-items-center rounded-2xl border border-cyan-900/10 bg-cyan-100 text-cyan-800 shadow-[0_18px_40px_rgba(14,116,144,0.12)]">
-            <Radar className="size-5" />
-          </span>
-          {!collapsed ? (
-            <span>
-              <span className="block text-sm font-semibold text-slate-950">RentalRadar.ai</span>
-              <span className="text-xs text-slate-500">AI pricing ops</span>
-            </span>
-          ) : null}
+          <BrandLogo
+            markClassName="size-11"
+            showText={!collapsed}
+            textClassName="[&>span:first-child]:text-sm [&>span:first-child]:text-slate-950 [&>span:last-child]:text-slate-500"
+          />
         </Link>
         <button
           type="button"
