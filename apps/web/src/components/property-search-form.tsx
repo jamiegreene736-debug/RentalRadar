@@ -15,14 +15,13 @@ import { ActionState, AddressSuggestion } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const initialState: ActionState = { ok: false, message: "" };
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export function PropertySearchForm() {
   const [state, action] = useActionState(addPropertyAction, initialState);
   const [address, setAddress] = useState("");
   const [analysisStarted, setAnalysisStarted] = useState(false);
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
-  const [suggestionStatus, setSuggestionStatus] = useState<"idle" | "loading" | "ready" | "empty">("idle");
+  const [suggestionStatus, setSuggestionStatus] = useState<"idle" | "loading" | "ready" | "empty" | "error">("idle");
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const latestQuery = useRef("");
 
@@ -39,7 +38,7 @@ export function PropertySearchForm() {
     const timeout = window.setTimeout(async () => {
       try {
         setSuggestionStatus("loading");
-        const response = await fetch(`${API_BASE_URL}/address-suggestions?query=${encodeURIComponent(query)}&limit=5`, {
+        const response = await fetch(`/api/address-suggestions?query=${encodeURIComponent(query)}&limit=5`, {
           headers: { Accept: "application/json" },
           cache: "no-store",
         });
@@ -52,7 +51,7 @@ export function PropertySearchForm() {
       } catch {
         if (latestQuery.current === query) {
           setSuggestions([]);
-          setSuggestionStatus("empty");
+          setSuggestionStatus("error");
         }
       }
     }, 260);
@@ -119,11 +118,10 @@ export function PropertySearchForm() {
               className={cn(
                 "text-xs",
                 suggestionStatus === "empty" && address.trim().length >= 3 ? "text-amber-700" : "text-slate-500",
+                suggestionStatus === "error" ? "text-rose-700" : null,
               )}
             >
-              {suggestionStatus === "empty" && address.trim().length >= 3
-                ? "No verified address match yet. Keep typing the street, city, and state."
-                : "Choose a verified address so the comp search is pointed at the right market."}
+              {suggestionHelpText(suggestionStatus, address)}
             </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -188,4 +186,13 @@ export function PropertySearchForm() {
 function primaryAddressLine(suggestion: AddressSuggestion) {
   const cityState = [suggestion.city, suggestion.region].filter(Boolean).join(", ");
   return [suggestion.address_line1 || suggestion.formatted_address.split(",")[0], cityState].filter(Boolean).join(" · ");
+}
+
+function suggestionHelpText(status: "idle" | "loading" | "ready" | "empty" | "error", address: string) {
+  if (status === "loading") return "Looking up verified address matches...";
+  if (status === "error") return "Address lookup is temporarily unavailable. You can still type the full address and analyze it.";
+  if (status === "empty" && address.trim().length >= 3) {
+    return "No exact match yet. Add the city and state, or type the full address and continue.";
+  }
+  return "Choose a verified address so the comp search is pointed at the right market.";
 }
