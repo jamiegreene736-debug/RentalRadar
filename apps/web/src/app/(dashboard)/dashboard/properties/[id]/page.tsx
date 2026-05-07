@@ -1,11 +1,10 @@
 import Image from "next/image";
-import Link from "next/link";
 import { MapPin, Search } from "lucide-react";
 
 import { properties } from "@/app/(dashboard)/components/dashboard-data";
 import { GlassCard, PanelTitle } from "@/app/(dashboard)/components/glass-card";
 import { PropertyTabs } from "@/app/(dashboard)/components/property-tabs";
-import { Button } from "@/components/ui/button";
+import { PropertySearchForm } from "@/components/property-search-form";
 import { Input } from "@/components/ui/input";
 
 export default async function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -14,16 +13,14 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
 
   if (!property) {
     return (
-      <div className="grid gap-6">
+      <div className="grid gap-6 xl:grid-cols-[440px_minmax(0,1fr)]">
+        <PropertySearchForm />
         <GlassCard className="p-6">
           <PanelTitle
             eyebrow="Property Detail"
-            title="Add a property to unlock this page"
-            copy="The sample property has been removed. Enter a real address first, then this page will show live market data for that property."
+            title="Search or add an address"
+            copy="No real property exists for this detail page yet. Enter an address here and RentalRadar will create the property and queue the first market scan."
           />
-          <Button asChild className="mt-6 h-12 rounded-full bg-cyan-300 px-6 text-slate-950 hover:bg-cyan-200">
-            <Link href="/dashboard/properties/new">Add property address</Link>
-          </Button>
         </GlassCard>
       </div>
     );

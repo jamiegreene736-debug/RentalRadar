@@ -8,8 +8,8 @@ export default function NewPropertyPage() {
       <div>
         <PanelTitle
           eyebrow="Add Property"
-          title="Enter the address you want priced"
-          copy="This is the first real input RentalRadar needs. After the property is created, market scans and recommendations can be queued from the backend."
+          title="Search or add an address"
+          copy="Enter the property address you want priced. After the property is created, market scans and recommendations can be queued from the backend."
         />
       </div>
     </div>

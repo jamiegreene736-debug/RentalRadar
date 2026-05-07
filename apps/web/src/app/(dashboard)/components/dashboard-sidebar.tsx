@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/dashboard/properties/new", label: "Add Property", icon: Building2 },
+  { href: "/dashboard/properties", label: "Property Detail", icon: Building2 },
   { href: "/dashboard/connections", label: "Connections", icon: PlugZap },
   { href: "/dashboard/ai-log", label: "AI Scraping Log", icon: Bot },
   { href: "/dashboard/account", label: "Account", icon: UserCircle },
@@ -47,7 +47,7 @@ export function DashboardSidebar() {
 
       <nav className="mt-10 space-y-2">
         {nav.map((item) => {
-          const active = pathname === item.href;
+          const active = item.href === "/dashboard/properties" ? pathname.startsWith("/dashboard/properties") : pathname === item.href;
           return (
             <Link
               key={item.href}
