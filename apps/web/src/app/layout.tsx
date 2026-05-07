@@ -53,23 +53,25 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const body = <body className={inter.className}>{children}</body>;
+  const layout = (
+    <html lang="en" className="dark">
+      <body className={inter.className}>{children}</body>
+    </html>
+  );
+
+  if (!isClerkEnabled) {
+    return layout;
+  }
 
   return (
-    <html lang="en" className="dark">
-      {isClerkEnabled ? (
-        <ClerkProvider
-          signInUrl={signInPath}
-          signUpUrl={signUpPath}
-          signInFallbackRedirectUrl={afterAuthPath}
-          signUpFallbackRedirectUrl={afterAuthPath}
-          afterSignOutUrl="/"
-        >
-          {body}
-        </ClerkProvider>
-      ) : (
-        body
-      )}
-    </html>
+    <ClerkProvider
+      signInUrl={signInPath}
+      signUpUrl={signUpPath}
+      signInFallbackRedirectUrl={afterAuthPath}
+      signUpFallbackRedirectUrl={afterAuthPath}
+      afterSignOutUrl="/"
+    >
+      {layout}
+    </ClerkProvider>
   );
 }
