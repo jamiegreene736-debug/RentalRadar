@@ -1,0 +1,642 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  owner
+  admin
+  analyst
+  readonly
+
+  @@map("user_role")
+}
+
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  paused
+  canceled
+  incomplete
+  incomplete_expired
+
+  @@map("subscription_status")
+}
+
+enum PropertySubscriptionStatus {
+  active
+  paused
+  canceled
+  past_due
+
+  @@map("property_subscription_status")
+}
+
+enum ScrapeSource {
+  airbnb
+  vrbo
+  booking
+  direct_pms
+  guesty
+  hostaway
+  ownerrez
+  manual
+  other
+
+  @@map("scrape_source")
+}
+
+enum ScrapeJobStatus {
+  queued
+  running
+  succeeded
+  failed
+  canceled
+  needs_review
+
+  @@map("scrape_job_status")
+}
+
+enum AgentTrainingStatus {
+  candidate
+  validating
+  approved
+  rejected
+  retired
+
+  @@map("agent_training_status")
+}
+
+enum PricingRecommendationStatus {
+  draft
+  pending_approval
+  approved
+  rejected
+  pushed
+  superseded
+
+  @@map("pricing_recommendation_status")
+}
+
+enum PmsConnectionStatus {
+  connected
+  needs_reauth
+  disabled
+  revoked
+  error
+
+  @@map("pms_connection_status")
+}
+
+enum PmsProvider {
+  guesty
+  hostaway
+  ownerrez
+  lodgify
+  hostfully
+  airbnb
+  vrbo
+  booking
+  direct
+  other
+
+  @@map("pms_provider")
+}
+
+model Organization {
+  id                    String                     @id @default(uuid()) @db.Uuid
+  name                  String
+  slug                  String?                    @unique
+  stripeCustomerId      String?                    @unique @map("stripe_customer_id")
+  billingEmail          String?                    @map("billing_email") @db.Citext
+  createdAt             DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  users                 AppUser[]
+  members               OrganizationMember[]
+  subscriptions         OrganizationSubscription[]
+  properties            Property[]
+  pmsConnections        PmsConnection[]
+
+  @@map("organizations")
+}
+
+model AppUser {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  email                  String                  @unique @db.Citext
+  fullName               String?                 @map("full_name")
+  avatarUrl              String?                 @map("avatar_url")
+  clerkUserId            String?                 @unique @map("clerk_user_id")
+  supabaseAuthUserId     String?                 @unique @map("supabase_auth_user_id") @db.Uuid
+  defaultOrganizationId  String?                 @map("default_organization_id") @db.Uuid
+  defaultOrganization    Organization?           @relation(fields: [defaultOrganizationId], references: [id], onDelete: SetNull)
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  memberships            OrganizationMember[]
+  approvedStrategies     ScraperStrategy[]
+  approvals              PricingRecommendation[]
+
+  @@map("app_users")
+}
+
+model OrganizationMember {
+  organizationId String       @map("organization_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  role           UserRole     @default(owner)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           AppUser      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, userId])
+  @@map("organization_members")
+}
+
+model SubscriptionPlan {
+  id                         String                 @id @default(uuid()) @db.Uuid
+  code                       String                 @unique
+  name                       String
+  monthlyPriceCents          Int                    @map("monthly_price_cents")
+  stripePriceId              String?                @unique @map("stripe_price_id")
+  maxScrapesPerPropertyMonth Int                    @default(300) @map("max_scrapes_per_property_month")
+  maxCompetitorsPerProperty  Int                    @default(25) @map("max_competitors_per_property")
+  supportsPmsPush            Boolean                @default(false) @map("supports_pms_push")
+  metadata                   Json                   @default("{}")
+  active                     Boolean                @default(true)
+  createdAt                  DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  propertySubscriptions      PropertySubscription[]
+
+  @@map("subscription_plans")
+}
+
+model OrganizationSubscription {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  organizationId        String                 @map("organization_id") @db.Uuid
+  stripeSubscriptionId  String?                @unique @map("stripe_subscription_id")
+  stripeCustomerId      String?                @map("stripe_customer_id")
+  status                SubscriptionStatus     @default(incomplete)
+  currentPeriodStart    DateTime?              @map("current_period_start") @db.Timestamptz(6)
+  currentPeriodEnd      DateTime?              @map("current_period_end") @db.Timestamptz(6)
+  cancelAtPeriodEnd     Boolean                @default(false) @map("cancel_at_period_end")
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertySubscriptions PropertySubscription[]
+
+  @@map("organization_subscriptions")
+}
+
+model Property {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  organizationId        String                  @map("organization_id") @db.Uuid
+  name                  String?
+  addressLine1          String                  @map("address_line1")
+  addressLine2          String?                 @map("address_line2")
+  city                  String?
+  region                String?
+  postalCode            String?                 @map("postal_code")
+  countryCode           String                  @default("US") @map("country_code") @db.Char(2)
+  formattedAddress      String?                 @map("formatted_address")
+  latitude              Decimal?                @db.Decimal(9, 6)
+  longitude             Decimal?                @db.Decimal(9, 6)
+  bedrooms              Int?
+  bathrooms             Decimal?                @db.Decimal(4, 1)
+  sleeps                Int?
+  propertyType          String?                 @map("property_type")
+  timezone              String                  @default("America/New_York")
+  currencyCode          String                  @default("USD") @map("currency_code") @db.Char(3)
+  basePriceCents        Int?                    @map("base_price_cents")
+  minPriceCents         Int?                    @map("min_price_cents")
+  maxPriceCents         Int?                    @map("max_price_cents")
+  active                Boolean                 @default(true)
+  metadata              Json                    @default("{}")
+  createdAt             DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  organization          Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertySubscriptions PropertySubscription[]
+  compSets              CompSet[]
+  competitors           Competitor[]
+  pmsMappings           PropertyPmsMapping[]
+  scrapeJobs            ScrapeJob[]
+  rateObservations      RateObservation[]
+  pricingRecommendations PricingRecommendation[]
+  ratePushes            RatePush[]
+
+  @@index([organizationId])
+  @@map("properties")
+}
+
+model PropertySubscription {
+  id                         String                       @id @default(uuid()) @db.Uuid
+  organizationSubscriptionId String?                      @map("organization_subscription_id") @db.Uuid
+  propertyId                 String                       @map("property_id") @db.Uuid
+  planId                     String                       @map("plan_id") @db.Uuid
+  stripeSubscriptionItemId   String?                      @unique @map("stripe_subscription_item_id")
+  status                     PropertySubscriptionStatus   @default(active)
+  monthlyPriceCents          Int                          @map("monthly_price_cents")
+  startsAt                   DateTime                     @default(now()) @map("starts_at") @db.Timestamptz(6)
+  endsAt                     DateTime?                    @map("ends_at") @db.Timestamptz(6)
+  createdAt                  DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime                     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  organizationSubscription   OrganizationSubscription?    @relation(fields: [organizationSubscriptionId], references: [id], onDelete: SetNull)
+  property                   Property                     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  plan                       SubscriptionPlan             @relation(fields: [planId], references: [id])
+
+  @@map("property_subscriptions")
+}
+
+model CompSet {
+  id              String       @id @default(uuid()) @db.Uuid
+  propertyId      String       @map("property_id") @db.Uuid
+  name            String       @default("Default comp set")
+  searchRadiusKm  Decimal?     @map("search_radius_km") @db.Decimal(6, 2)
+  bedroomsMin     Int?         @map("bedrooms_min")
+  bedroomsMax     Int?         @map("bedrooms_max")
+  sleepsMin       Int?         @map("sleeps_min")
+  sleepsMax       Int?         @map("sleeps_max")
+  active          Boolean      @default(true)
+  selectionRules  Json         @default("{}") @map("selection_rules")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  property        Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  competitors     Competitor[]
+  recommendations PricingRecommendation[]
+
+  @@map("comp_sets")
+}
+
+model Competitor {
+  id              String            @id @default(uuid()) @db.Uuid
+  compSetId       String            @map("comp_set_id") @db.Uuid
+  propertyId      String            @map("property_id") @db.Uuid
+  source          ScrapeSource
+  externalId      String?           @map("external_id")
+  externalUrl     String            @map("external_url")
+  canonicalUrl    String?           @map("canonical_url")
+  title           String?
+  address         String?
+  latitude        Decimal?          @db.Decimal(9, 6)
+  longitude       Decimal?          @db.Decimal(9, 6)
+  bedrooms        Int?
+  bathrooms       Decimal?          @db.Decimal(4, 1)
+  sleeps          Int?
+  rating          Decimal?          @db.Decimal(3, 2)
+  reviewCount     Int?              @map("review_count")
+  similarityScore Decimal?          @map("similarity_score") @db.Decimal(5, 4)
+  active          Boolean           @default(true)
+  metadata        Json              @default("{}")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  compSet         CompSet           @relation(fields: [compSetId], references: [id], onDelete: Cascade)
+  property        Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  scrapeJobs      ScrapeJob[]
+  snapshots       ScrapeSnapshot[]
+  observations    RateObservation[]
+
+  @@unique([compSetId, source, externalUrl])
+  @@map("competitors")
+}
+
+model PmsConnection {
+  id                    String               @id @default(uuid()) @db.Uuid
+  organizationId        String               @map("organization_id") @db.Uuid
+  provider              PmsProvider
+  accountRef            String?              @map("account_ref")
+  displayName           String?              @map("display_name")
+  status                PmsConnectionStatus  @default(connected)
+  accessTokenEncrypted  String?              @map("access_token_encrypted")
+  refreshTokenEncrypted String?              @map("refresh_token_encrypted")
+  tokenCipher           String               @default("kms:aes-256-gcm") @map("token_cipher")
+  tokenExpiresAt        DateTime?            @map("token_expires_at") @db.Timestamptz(6)
+  scopes                String[]             @default([])
+  lastVerifiedAt        DateTime?            @map("last_verified_at") @db.Timestamptz(6)
+  errorMessage          String?              @map("error_message")
+  metadata              Json                 @default("{}")
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  organization          Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyMappings      PropertyPmsMapping[]
+  ratePushes            RatePush[]
+
+  @@unique([organizationId, provider, accountRef])
+  @@map("pms_connections")
+}
+
+model PropertyPmsMapping {
+  id                 String        @id @default(uuid()) @db.Uuid
+  propertyId         String        @map("property_id") @db.Uuid
+  pmsConnectionId    String        @map("pms_connection_id") @db.Uuid
+  externalPropertyId String        @map("external_property_id")
+  externalChannelIds Json          @default("{}") @map("external_channel_ids")
+  active             Boolean       @default(true)
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  property           Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  pmsConnection      PmsConnection @relation(fields: [pmsConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, pmsConnectionId])
+  @@unique([pmsConnectionId, externalPropertyId])
+  @@map("property_pms_mappings")
+}
+
+model ScraperStrategy {
+  id                 String             @id @default(uuid()) @db.Uuid
+  source             ScrapeSource
+  domain             String
+  layoutFingerprint  String             @map("layout_fingerprint")
+  strategyJson       Json               @map("strategy_json")
+  version            Int                @default(1)
+  successRate        Decimal            @default(0) @map("success_rate") @db.Decimal(5, 4)
+  active             Boolean            @default(true)
+  createdByAgent     String?            @map("created_by_agent")
+  approvedByUserId   String?            @map("approved_by_user_id") @db.Uuid
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  approvedByUser     AppUser?           @relation(fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  scrapeJobs         ScrapeJob[]
+  trainingRuns       AgentTrainingRun[]
+
+  @@unique([source, domain, layoutFingerprint, version])
+  @@map("scraper_strategies")
+}
+
+model ScrapeJob {
+  id                  String            @id @default(uuid()) @db.Uuid
+  organizationId      String            @map("organization_id") @db.Uuid
+  propertyId          String?           @map("property_id") @db.Uuid
+  competitorId        String?           @map("competitor_id") @db.Uuid
+  scraperStrategyId   String?           @map("scraper_strategy_id") @db.Uuid
+  source              ScrapeSource
+  targetUrl           String            @map("target_url")
+  stayDateStart       DateTime?         @map("stay_date_start") @db.Date
+  stayDateEnd         DateTime?         @map("stay_date_end") @db.Date
+  status              ScrapeJobStatus   @default(queued)
+  priority            Int               @default(100)
+  attempts            Int               @default(0)
+  maxAttempts         Int               @default(3) @map("max_attempts")
+  lockedBy            String?           @map("locked_by")
+  lockedAt            DateTime?         @map("locked_at") @db.Timestamptz(6)
+  startedAt           DateTime?         @map("started_at") @db.Timestamptz(6)
+  completedAt         DateTime?         @map("completed_at") @db.Timestamptz(6)
+  errorCode           String?           @map("error_code")
+  errorMessage        String?           @map("error_message")
+  requestContext      Json              @default("{}") @map("request_context")
+  resultSummary       Json              @default("{}") @map("result_summary")
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  property            Property?         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  competitor          Competitor?       @relation(fields: [competitorId], references: [id], onDelete: SetNull)
+  scraperStrategy     ScraperStrategy?  @relation(fields: [scraperStrategyId], references: [id], onDelete: SetNull)
+  logs                ScrapeJobLog[]
+  snapshots           ScrapeSnapshot[]
+  observations        RateObservation[]
+  trainingRuns        AgentTrainingRun[]
+
+  @@index([status, priority, createdAt])
+  @@map("scrape_jobs")
+}
+
+model ScrapeJobLog {
+  id          BigInt    @id @default(autoincrement())
+  scrapeJobId String    @map("scrape_job_id") @db.Uuid
+  level       String
+  event       String
+  message     String?
+  payload     Json      @default("{}")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  scrapeJob   ScrapeJob @relation(fields: [scrapeJobId], references: [id], onDelete: Cascade)
+
+  @@index([scrapeJobId, createdAt])
+  @@map("scrape_job_logs")
+}
+
+model ScrapeSnapshot {
+  id                   String            @id @default(uuid()) @db.Uuid
+  scrapeJobId          String            @map("scrape_job_id") @db.Uuid
+  competitorId         String?           @map("competitor_id") @db.Uuid
+  source               ScrapeSource
+  rawHtmlUrl           String?           @map("raw_html_url")
+  screenshotUrl        String?           @map("screenshot_url")
+  networkTraceUrl      String?           @map("network_trace_url")
+  domFingerprint       String?           @map("dom_fingerprint")
+  layoutFingerprint    String?           @map("layout_fingerprint")
+  extractionConfidence Decimal?          @map("extraction_confidence") @db.Decimal(5, 4)
+  metadata             Json              @default("{}")
+  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  scrapeJob            ScrapeJob         @relation(fields: [scrapeJobId], references: [id], onDelete: Cascade)
+  competitor           Competitor?       @relation(fields: [competitorId], references: [id], onDelete: SetNull)
+  observations         RateObservation[]
+
+  @@map("scrape_snapshots")
+}
+
+model RateObservation {
+  id                   String          @id @default(uuid()) @db.Uuid
+  propertyId           String          @map("property_id") @db.Uuid
+  competitorId         String?         @map("competitor_id") @db.Uuid
+  scrapeJobId          String?         @map("scrape_job_id") @db.Uuid
+  scrapeSnapshotId     String?         @map("scrape_snapshot_id") @db.Uuid
+  source               ScrapeSource
+  stayDate             DateTime        @map("stay_date") @db.Date
+  currencyCode         String          @default("USD") @map("currency_code") @db.Char(3)
+  nightlyRateCents     Int?            @map("nightly_rate_cents")
+  totalRateCents       Int?            @map("total_rate_cents")
+  feesCents            Int?            @map("fees_cents")
+  taxesCents           Int?            @map("taxes_cents")
+  available            Boolean?
+  minNights            Int?            @map("min_nights")
+  maxNights            Int?            @map("max_nights")
+  cancellationPolicy   String?         @map("cancellation_policy")
+  extractionConfidence Decimal?        @map("extraction_confidence") @db.Decimal(5, 4)
+  observedAt           DateTime        @default(now()) @map("observed_at") @db.Timestamptz(6)
+  rawPayload           Json            @default("{}") @map("raw_payload")
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  property             Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  competitor           Competitor?     @relation(fields: [competitorId], references: [id], onDelete: SetNull)
+  scrapeJob            ScrapeJob?      @relation(fields: [scrapeJobId], references: [id], onDelete: SetNull)
+  scrapeSnapshot       ScrapeSnapshot? @relation(fields: [scrapeSnapshotId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, stayDate, observedAt])
+  @@index([competitorId, stayDate, observedAt])
+  @@map("rate_observations")
+}
+
+model PricingRecommendation {
+  id                    String                       @id @default(uuid()) @db.Uuid
+  propertyId            String                       @map("property_id") @db.Uuid
+  stayDate              DateTime                     @map("stay_date") @db.Date
+  currencyCode          String                       @default("USD") @map("currency_code") @db.Char(3)
+  currentRateCents      Int?                         @map("current_rate_cents")
+  recommendedRateCents  Int                          @map("recommended_rate_cents")
+  minRateCents          Int?                         @map("min_rate_cents")
+  maxRateCents          Int?                         @map("max_rate_cents")
+  confidence            Decimal?                     @db.Decimal(5, 4)
+  recommendedMinStay    Int?                         @map("recommended_min_stay")
+  discountPercent       Decimal?                     @map("discount_percent") @db.Decimal(5, 2)
+  status                PricingRecommendationStatus  @default(draft)
+  modelVersion          String                       @map("model_version")
+  compSetId             String?                      @map("comp_set_id") @db.Uuid
+  reason                Json                         @default("{}")
+  approvedByUserId      String?                      @map("approved_by_user_id") @db.Uuid
+  approvedAt            DateTime?                    @map("approved_at") @db.Timestamptz(6)
+  supersededById        String?                      @map("superseded_by_id") @db.Uuid
+  createdAt             DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  property              Property                     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  compSet               CompSet?                     @relation(fields: [compSetId], references: [id], onDelete: SetNull)
+  approvedByUser        AppUser?                     @relation(fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  supersededBy          PricingRecommendation?       @relation("RecommendationSupersession", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes            PricingRecommendation[]      @relation("RecommendationSupersession")
+  ratePushes            RatePush[]
+
+  @@index([propertyId, stayDate])
+  @@map("pricing_recommendations")
+}
+
+model LocalEvent {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  propertyId     String?      @map("property_id") @db.Uuid
+  name           String
+  category       String?
+  startsOn       DateTime     @map("starts_on") @db.Date
+  endsOn         DateTime     @map("ends_on") @db.Date
+  distanceKm     Decimal?     @map("distance_km") @db.Decimal(6, 2)
+  demandScore    Decimal      @default(0.5) @map("demand_score") @db.Decimal(5, 4)
+  source         String       @default("manual")
+  metadata       Json         @default("{}")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([organizationId, startsOn, endsOn])
+  @@map("local_events")
+}
+
+model OccupancySignal {
+  id                String   @id @default(uuid()) @db.Uuid
+  propertyId        String   @map("property_id") @db.Uuid
+  stayDate          DateTime @map("stay_date") @db.Date
+  propertyOccupancy Decimal? @map("property_occupancy") @db.Decimal(5, 4)
+  marketOccupancy   Decimal? @map("market_occupancy") @db.Decimal(5, 4)
+  pacingRatio       Decimal? @map("pacing_ratio") @db.Decimal(7, 4)
+  pickup7d          Int?     @map("pickup_7d")
+  pickup30d         Int?     @map("pickup_30d")
+  source            String   @default("pms")
+  metadata          Json     @default("{}")
+  observedAt        DateTime @default(now()) @map("observed_at") @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([propertyId, stayDate, observedAt])
+  @@map("occupancy_signals")
+}
+
+model PricingExperiment {
+  id            String   @id @default(uuid()) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  propertyId     String? @map("property_id") @db.Uuid
+  name           String
+  status         String  @default("draft")
+  hypothesis     String?
+  variants       Json
+  trafficSplit   Json    @default("{}") @map("traffic_split")
+  primaryMetric  String  @default("revpar") @map("primary_metric")
+  startedAt      DateTime? @map("started_at") @db.Timestamptz(6)
+  endedAt        DateTime? @map("ended_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  assignments    PricingExperimentAssignment[]
+
+  @@index([organizationId, status])
+  @@map("pricing_experiments")
+}
+
+model PricingExperimentAssignment {
+  id                       String   @id @default(uuid()) @db.Uuid
+  experimentId             String   @map("experiment_id") @db.Uuid
+  propertyId               String   @map("property_id") @db.Uuid
+  pricingRecommendationId  String?  @map("pricing_recommendation_id") @db.Uuid
+  stayDate                 DateTime @map("stay_date") @db.Date
+  variantKey               String   @map("variant_key")
+  assignedRateCents        Int      @map("assigned_rate_cents")
+  assignedMinStay          Int?     @map("assigned_min_stay")
+  assignedDiscountPercent  Decimal? @map("assigned_discount_percent") @db.Decimal(5, 2)
+  assignmentContext        Json     @default("{}") @map("assignment_context")
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  experiment               PricingExperiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+
+  @@unique([experimentId, propertyId, stayDate])
+  @@index([propertyId, stayDate])
+  @@map("pricing_experiment_assignments")
+}
+
+model PricingPerformanceEvent {
+  id                      String    @id @default(uuid()) @db.Uuid
+  propertyId              String    @map("property_id") @db.Uuid
+  pricingRecommendationId String?   @map("pricing_recommendation_id") @db.Uuid
+  experimentAssignmentId  String?   @map("experiment_assignment_id") @db.Uuid
+  stayDate                DateTime  @map("stay_date") @db.Date
+  booked                  Boolean   @default(false)
+  bookedAt                DateTime? @map("booked_at") @db.Timestamptz(6)
+  realizedRateCents       Int?      @map("realized_rate_cents")
+  revenueCents            Int?      @map("revenue_cents")
+  occupancyStatus         String    @default("unknown") @map("occupancy_status")
+  channel                 String?
+  metadata                Json      @default("{}")
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([propertyId, stayDate])
+  @@map("pricing_performance_events")
+}
+
+model RatePush {
+  id                       String                 @id @default(uuid()) @db.Uuid
+  propertyId               String                 @map("property_id") @db.Uuid
+  pmsConnectionId          String                 @map("pms_connection_id") @db.Uuid
+  pricingRecommendationId  String?                @map("pricing_recommendation_id") @db.Uuid
+  stayDate                 DateTime               @map("stay_date") @db.Date
+  currencyCode             String                 @default("USD") @map("currency_code") @db.Char(3)
+  rateCents                Int                    @map("rate_cents")
+  status                   String
+  externalRequestId        String?                @map("external_request_id")
+  externalResponse         Json                   @default("{}") @map("external_response")
+  errorMessage             String?                @map("error_message")
+  pushedAt                 DateTime?              @map("pushed_at") @db.Timestamptz(6)
+  createdAt                DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  property                 Property               @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  pmsConnection            PmsConnection          @relation(fields: [pmsConnectionId], references: [id], onDelete: Cascade)
+  pricingRecommendation    PricingRecommendation? @relation(fields: [pricingRecommendationId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, stayDate])
+  @@map("rate_pushes")
+}
+
+model AgentTrainingRun {
+  id                    String               @id @default(uuid()) @db.Uuid
+  scrapeJobId           String?              @map("scrape_job_id") @db.Uuid
+  scraperStrategyId     String?              @map("scraper_strategy_id") @db.Uuid
+  source                ScrapeSource
+  domain                String
+  layoutFingerprint     String?              @map("layout_fingerprint")
+  agentName             String               @map("agent_name")
+  modelName             String?              @map("model_name")
+  promptVersion         String?              @map("prompt_version")
+  status                AgentTrainingStatus  @default(candidate)
+  inputSnapshotUrl      String?              @map("input_snapshot_url")
+  inputDomUrl           String?              @map("input_dom_url")
+  generatedStrategyJson Json?                @map("generated_strategy_json")
+  validationReport      Json                 @default("{}") @map("validation_report")
+  confidence            Decimal?             @db.Decimal(5, 4)
+  tokenUsage            Json                 @default("{}") @map("token_usage")
+  errorMessage          String?              @map("error_message")
+  startedAt             DateTime             @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt           DateTime?            @map("completed_at") @db.Timestamptz(6)
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  scrapeJob             ScrapeJob?           @relation(fields: [scrapeJobId], references: [id], onDelete: SetNull)
+  scraperStrategy       ScraperStrategy?     @relation(fields: [scraperStrategyId], references: [id], onDelete: SetNull)
+
+  @@map("agent_training_runs")
+}

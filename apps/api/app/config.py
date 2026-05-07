@@ -1,0 +1,39 @@
+from __future__ import annotations
+
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import AnyHttpUrl, Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    app_name: str = "RentalRadar API"
+    environment: Literal["local", "test", "staging", "production"] = "local"
+    database_url: str
+    redis_url: str = "redis://localhost:6379/0"
+    celery_broker_url: str = "redis://localhost:6379/1"
+    celery_result_backend: str = "redis://localhost:6379/2"
+    token_encryption_key: str = "dev-only-replace-me"
+    scraper_proxy_urls: list[str] = Field(default_factory=list)
+    llm_provider: str = "stub"
+    openai_api_key: str | None = None
+    default_market_scan_days: int = 90
+    default_comp_limit: int = 12
+    scraper_headless: bool = True
+    scraper_stealth: bool = True
+    cors_origins: list[AnyHttpUrl] | list[str] = Field(default_factory=lambda: ["*"])
+
+    @field_validator("scraper_proxy_urls", mode="before")
+    @classmethod
+    def parse_proxy_urls(cls, value: str | list[str]) -> list[str]:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()  # type: ignore[call-arg]

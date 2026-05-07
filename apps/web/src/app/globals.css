@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 206 38% 97%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 197 82% 33%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 158 30% 92%;
+    --secondary-foreground: 170 58% 18%;
+    --muted: 210 28% 93%;
+    --muted-foreground: 215 16% 42%;
+    --accent: 42 95% 90%;
+    --accent-foreground: 32 94% 18%;
+    --destructive: 0 73% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 22% 84%;
+    --input: 214 22% 84%;
+    --ring: 197 82% 33%;
+    --radius: 0.5rem;
+    --chart-airbnb: 352 88% 62%;
+    --chart-vrbo: 213 85% 42%;
+    --chart-booking: 218 100% 27%;
+    --chart-direct: 157 70% 33%;
+    --chart-recommend: 32 95% 44%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+.map-grid {
+  background-image:
+    linear-gradient(rgba(14, 116, 144, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 116, 144, 0.15) 1px, transparent 1px);
+  background-size: 28px 28px;
+}

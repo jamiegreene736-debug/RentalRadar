@@ -1,0 +1,30 @@
+import { Badge } from "@/components/ui/badge";
+import { PricingRecommendation } from "@/lib/types";
+import { money, percent } from "@/lib/utils";
+
+export function CompetitiveInsight({ recommendation }: { recommendation?: PricingRecommendation }) {
+  const logic = recommendation?.reason.competitive_logic;
+  const signals = recommendation?.reason.signals;
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      <div className="rounded-lg border bg-card p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Beyond-style</p>
+        <p className="mt-3 text-2xl font-semibold">{money(logic?.beyond_style_calendar_rate_cents)}</p>
+        <p className="mt-1 text-sm text-muted-foreground">Calendar curve benchmark</p>
+      </div>
+      <div className="rounded-lg border bg-card p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Wheelhouse-style</p>
+        <p className="mt-3 text-2xl font-semibold">{money(logic?.wheelhouse_style_comp_rate_cents)}</p>
+        <p className="mt-1 text-sm text-muted-foreground">Comp median benchmark</p>
+      </div>
+      <div className="rounded-lg border bg-card p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">RentalRadar</p>
+          <Badge variant="success">{percent(signals?.live_data_quality)}</Badge>
+        </div>
+        <p className="mt-3 text-2xl font-semibold">{money(logic?.rentalradar_live_rate_cents)}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{recommendation?.reason.ai_advice?.summary}</p>
+      </div>
+    </div>
+  );
+}
