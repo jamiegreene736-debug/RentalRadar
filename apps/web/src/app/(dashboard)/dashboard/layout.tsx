@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { DashboardAccountControls } from "@/app/(dashboard)/components/dashboard-account-controls";
 import { DashboardSidebar, MobileDashboardNav } from "@/app/(dashboard)/components/dashboard-sidebar";
 import { RealtimeStatus } from "@/app/(dashboard)/components/realtime-status";
 import { BrandLogo } from "@/components/brand-logo";
+import { isClerkEnabled } from "@/lib/auth-config";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -28,7 +30,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <p className="truncate text-sm text-slate-600">Add a property to unlock live scans, pricing recommendations, and channel setup.</p>
                 </div>
               </div>
-              <RealtimeStatus />
+              <div className="flex shrink-0 items-center gap-2">
+                <div className="hidden md:block">
+                  <RealtimeStatus />
+                </div>
+                <DashboardAccountControls clerkEnabled={isClerkEnabled} />
+              </div>
             </div>
           </header>
           <div className="px-4 pb-28 pt-6 sm:px-6 lg:px-8 lg:pb-8">{children}</div>

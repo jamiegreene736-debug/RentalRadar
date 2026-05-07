@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Activity, Bot, Building2, ChevronLeft, LayoutDashboard, PlugZap, Settings } from "lucide-react";
+import { Activity, Bot, Building2, ChevronLeft, LayoutDashboard, PlugZap, UserCircle } from "lucide-react";
 import { useState } from "react";
 
 import { BrandLogo } from "@/components/brand-logo";
@@ -14,6 +14,7 @@ const nav = [
   { href: "/dashboard/properties/new", label: "Add Property", icon: Building2 },
   { href: "/dashboard/connections", label: "Connections", icon: PlugZap },
   { href: "/dashboard/ai-log", label: "AI Scraping Log", icon: Bot },
+  { href: "/dashboard/account", label: "Account", icon: UserCircle },
 ];
 
 export function DashboardSidebar() {
@@ -78,9 +79,9 @@ export function DashboardSidebar() {
           ) : null}
         </div>
         {!collapsed ? (
-          <Link href="/dashboard/settings" className="mt-4 flex items-center gap-2 text-xs text-slate-500 hover:text-cyan-800">
-            <Settings className="size-3.5" />
-            Settings
+          <Link href="/dashboard/account" className="mt-4 flex items-center gap-2 text-xs text-slate-500 hover:text-cyan-800">
+            <UserCircle className="size-3.5" />
+            Account profile
           </Link>
         ) : null}
       </div>
@@ -91,7 +92,7 @@ export function DashboardSidebar() {
 export function MobileDashboardNav() {
   const pathname = usePathname();
   return (
-    <div className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-4 rounded-3xl border border-cyan-900/10 bg-white/90 p-2 shadow-[0_20px_70px_rgba(14,116,144,0.18)] backdrop-blur-xl lg:hidden">
+    <div className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-5 rounded-3xl border border-cyan-900/10 bg-white/90 p-2 shadow-[0_20px_70px_rgba(14,116,144,0.18)] backdrop-blur-xl lg:hidden">
       {nav.map((item) => {
         const active = pathname === item.href;
         return (
