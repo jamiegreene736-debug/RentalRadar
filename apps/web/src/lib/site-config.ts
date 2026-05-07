@@ -1,5 +1,4 @@
-const clerkSignUpUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL?.trim();
-const isPlaceholderSignUpRoute = clerkSignUpUrl === "/sign-up" || clerkSignUpUrl === "/sign-up/";
+import { signUpPath } from "@/lib/auth-config";
 
-export const hasClerkSignUp = Boolean(clerkSignUpUrl && !isPlaceholderSignUpRoute);
-export const getStartedHref = hasClerkSignUp && clerkSignUpUrl ? clerkSignUpUrl : "/dashboard";
+export const hasClerkSignUp = true;
+export const getStartedHref = signUpPath;

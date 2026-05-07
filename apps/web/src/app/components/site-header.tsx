@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Activity, ArrowRight } from "lucide-react";
+import { Activity, ArrowRight, LogIn } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { signInPath } from "@/lib/auth-config";
 import { getStartedHref } from "@/lib/site-config";
 
 export function SiteHeader() {
@@ -28,12 +29,20 @@ export function SiteHeader() {
             Pricing
           </a>
         </nav>
-        <Button asChild className="h-10 rounded-full bg-cyan-300 px-5 text-slate-950 hover:bg-cyan-200">
-          <Link href={getStartedHref}>
-            Get Started
-            <ArrowRight />
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="ghost" className="hidden h-10 rounded-full px-4 text-slate-200 hover:bg-white/10 hover:text-white sm:inline-flex">
+            <Link href={signInPath}>
+              <LogIn />
+              Sign In
+            </Link>
+          </Button>
+          <Button asChild className="h-10 rounded-full bg-cyan-300 px-5 text-slate-950 hover:bg-cyan-200">
+            <Link href={getStartedHref}>
+              Get Started
+              <ArrowRight />
+            </Link>
+          </Button>
+        </div>
       </div>
     </header>
   );

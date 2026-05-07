@@ -1,7 +1,9 @@
+import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
 import "@/app/globals.css";
+import { afterAuthPath, isClerkEnabled, signInPath, signUpPath } from "@/lib/auth-config";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -51,9 +53,23 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const body = <body className={inter.className}>{children}</body>;
+
   return (
     <html lang="en" className="dark">
-      <body className={inter.className}>{children}</body>
+      {isClerkEnabled ? (
+        <ClerkProvider
+          signInUrl={signInPath}
+          signUpUrl={signUpPath}
+          signInFallbackRedirectUrl={afterAuthPath}
+          signUpFallbackRedirectUrl={afterAuthPath}
+          afterSignOutUrl="/"
+        >
+          {body}
+        </ClerkProvider>
+      ) : (
+        body
+      )}
     </html>
   );
 }

@@ -11,6 +11,23 @@ npm install
 npm run dev
 ```
 
+## Auth
+
+RentalRadar uses Clerk for account creation, sign-in, and dashboard session protection.
+
+Set these in `.env.local` for local auth testing and in Railway for production:
+
+```bash
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
+CLERK_SECRET_KEY=sk_...
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/dashboard
+NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/dashboard
+```
+
+Without Clerk keys, `/sign-in` and `/sign-up` render a setup notice and `/dashboard` remains accessible for local development. With Clerk keys present, `/dashboard` requires a signed-in user.
+
 The dashboard reads from `NEXT_PUBLIC_API_BASE_URL` and sends the temporary development auth headers expected by the FastAPI backend.
 
 ## Surfaces

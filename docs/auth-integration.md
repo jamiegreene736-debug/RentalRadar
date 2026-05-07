@@ -15,8 +15,9 @@ Use `auth.users(id)` as the identity source:
 
 Use Clerk as the identity provider and keep Supabase/Postgres as the data layer:
 
-1. Configure Clerk JWTs for Supabase so the JWT `sub` claim is the Clerk user ID.
-2. On Clerk `user.created` and `user.updated` webhooks, upsert:
+1. Configure the web app with `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `/sign-in`, and `/sign-up`.
+2. Configure Clerk JWTs for Supabase so the JWT `sub` claim is the Clerk user ID.
+3. On Clerk `user.created` and `user.updated` webhooks, upsert:
 
 ```sql
 insert into public.app_users (
@@ -37,8 +38,8 @@ on conflict (clerk_user_id) do update set
   updated_at = now();
 ```
 
-3. Create or assign an organization, then insert `public.organization_members`.
-4. RLS resolves the app user through `auth.jwt() ->> 'sub'`.
+4. Create or assign an organization, then insert `public.organization_members`.
+5. RLS resolves the app user through `auth.jwt() ->> 'sub'`.
 
 ## Backend Service Role
 

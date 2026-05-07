@@ -3,7 +3,7 @@ import { ArrowRight, Mail } from "lucide-react";
 import { SectionReveal } from "@/app/components/section-reveal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getStartedHref, hasClerkSignUp } from "@/lib/site-config";
+import { getStartedHref } from "@/lib/site-config";
 
 export function FooterCta() {
   return (
@@ -18,9 +18,7 @@ export function FooterCta() {
                 Let AI agents price your first property free.
               </h2>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-                {hasClerkSignUp
-                  ? "Enter your email and RentalRadar will start a Clerk magic-link sign-up flow."
-                  : "Jump into the live dashboard and connect your first property when you are ready."}
+                Create your account, then connect your first property from the dashboard.
               </p>
             </div>
             <form action={getStartedHref} className="rounded-3xl border border-white/[0.12] bg-slate-950/[0.72] p-4">
@@ -40,7 +38,7 @@ export function FooterCta() {
                   />
                 </div>
                 <Button type="submit" className="h-14 rounded-full bg-cyan-300 px-7 text-slate-950 hover:bg-cyan-200">
-                  {hasClerkSignUp ? "Get magic link" : "Open dashboard"}
+                  Create account
                   <ArrowRight />
                 </Button>
               </div>
