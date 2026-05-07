@@ -39,6 +39,11 @@
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+
+  ::selection {
+    background: rgba(34, 211, 238, 0.32);
+    color: white;
+  }
 }
 
 .map-grid {
@@ -46,4 +51,12 @@
     linear-gradient(rgba(14, 116, 144, 0.15) 1px, transparent 1px),
     linear-gradient(90deg, rgba(14, 116, 144, 0.15) 1px, transparent 1px);
   background-size: 28px 28px;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.text-pretty {
+  text-wrap: pretty;
 }
