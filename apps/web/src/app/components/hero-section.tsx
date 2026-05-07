@@ -8,18 +8,18 @@ import { getStartedHref } from "@/lib/site-config";
 
 export function HeroSection() {
   return (
-    <section className="relative flex min-h-[calc(100vh-4rem)] items-center overflow-hidden pt-16">
+    <section className="relative flex min-h-[calc(100vh-4rem)] items-center overflow-hidden pt-14">
       <DataStreamBackground />
-      <div className="container relative z-10 grid items-center gap-12 pb-14 pt-4 lg:grid-cols-[1fr_0.92fr] lg:pb-20 lg:pt-8">
-        <div className="max-w-4xl">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-200/[0.08] px-4 py-2 text-sm text-cyan-100 shadow-[0_0_44px_rgba(34,211,238,0.14)]">
+      <div className="container relative z-10 grid items-center gap-10 pb-14 pt-2 lg:grid-cols-[0.9fr_0.95fr] lg:pb-16 lg:pt-4">
+        <div className="max-w-3xl">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-200/[0.08] px-4 py-2 text-sm text-cyan-100 shadow-[0_0_44px_rgba(34,211,238,0.14)]">
             <span className="size-2 rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.9)]" />
             Headed Chrome AI agents + real booking data
           </div>
-          <h1 className="max-w-5xl text-balance text-5xl font-semibold leading-[0.95] tracking-normal text-white sm:text-6xl lg:text-7xl xl:text-8xl">
+          <h1 className="max-w-4xl text-balance text-4xl font-semibold leading-[1.02] tracking-normal text-white sm:text-5xl lg:text-6xl xl:text-7xl">
             The Next Generation of Vacation Rental Pricing Is Here
           </h1>
-          <p className="mt-7 max-w-3xl text-pretty text-lg leading-8 text-slate-300 sm:text-xl">
+          <p className="mt-6 max-w-3xl text-pretty text-lg leading-8 text-slate-300 sm:text-xl">
             RentalRadar combines AI agents running Playwright in real headed Chrome with booking pace, occupancy, PMS,
             and revenue signals. See what guests see right now, grounded by what properties are really booking for.
           </p>
