@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AnyHttpUrl, Field, field_validator
+from pydantic import AnyHttpUrl, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     environment: Literal["local", "test", "staging", "production"] = "local"
     database_url: str
     redis_url: str = "redis://localhost:6379/0"
-    celery_broker_url: str = "redis://localhost:6379/1"
-    celery_result_backend: str = "redis://localhost:6379/2"
+    celery_broker_url: str | None = None
+    celery_result_backend: str | None = None
     token_encryption_key: str = "dev-only-replace-me"
     ota_direct_master_secret: str = "dev-only-direct-ota-replace-me"
     ota_2fa_wait_seconds: int = 600
@@ -68,12 +68,13 @@ class Settings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
-    @field_validator("database_url", mode="before")
-    @classmethod
-    def use_installed_postgres_driver(cls, value: str) -> str:
-        if isinstance(value, str) and value.startswith("postgresql://"):
-            return value.replace("postgresql://", "postgresql+psycopg://", 1)
-        return value
+    @model_validator(mode="after")
+    def default_celery_to_redis(self) -> Settings:
+        if self.celery_broker_url is None:
+            self.celery_broker_url = self.redis_url
+        if self.celery_result_backend is None:
+            self.celery_result_backend = self.redis_url
+        return self
 
 
 @lru_cache
