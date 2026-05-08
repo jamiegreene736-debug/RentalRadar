@@ -56,7 +56,7 @@ async function proxyBackend(request: Request, context: RouteContext) {
 function forwardedHeaders(headers: Headers) {
   const nextHeaders = new Headers();
   for (const [key, value] of headers.entries()) {
-    if (["accept", "content-type", "x-organization-id", "x-user-id"].includes(key.toLowerCase())) {
+    if (["accept", "content-type"].includes(key.toLowerCase())) {
       nextHeaders.set(key, value);
     }
   }

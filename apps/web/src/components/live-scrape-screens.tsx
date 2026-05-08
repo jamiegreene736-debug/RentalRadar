@@ -6,9 +6,6 @@ import { AlertTriangle, CheckCircle2, Chrome, Circle, LoaderCircle, RefreshCw, T
 import { ScrapeSession, ScrapeSessionsResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const ORG_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "00000000-0000-0000-0000-000000000001";
-const USER_ID = process.env.NEXT_PUBLIC_USER_ID ?? "00000000-0000-0000-0000-000000000002";
-
 const sourceLabels: Record<string, string> = {
   airbnb: "Airbnb",
   vrbo: "VRBO",
@@ -35,8 +32,6 @@ export function LiveScrapeScreens({ propertyId, pending = false }: { propertyId?
         const response = await fetch(`/api/backend/properties/${propertyId}/scrape-sessions`, {
           headers: {
             Accept: "application/json",
-            "X-Organization-Id": ORG_ID,
-            "X-User-Id": USER_ID,
           },
           cache: "no-store",
         });

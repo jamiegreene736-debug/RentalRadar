@@ -7,8 +7,6 @@ import type { LucideIcon } from "lucide-react";
 import { RateForecastResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const ORG_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "00000000-0000-0000-0000-000000000001";
-const USER_ID = process.env.NEXT_PUBLIC_USER_ID ?? "00000000-0000-0000-0000-000000000002";
 const horizons = [6, 12, 24] as const;
 
 export function RateForecastResults({ propertyId }: { propertyId?: string }) {
@@ -30,8 +28,6 @@ export function RateForecastResults({ propertyId }: { propertyId?: string }) {
         const response = await fetch(`/api/backend/properties/${propertyId}/rate-forecast?months=${months}`, {
           headers: {
             Accept: "application/json",
-            "X-Organization-Id": ORG_ID,
-            "X-User-Id": USER_ID,
           },
           cache: "no-store",
         });

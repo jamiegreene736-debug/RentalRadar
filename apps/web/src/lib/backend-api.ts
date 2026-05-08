@@ -1,5 +1,8 @@
 import "server-only";
 
+import { auth } from "@clerk/nextjs/server";
+import { createHash } from "node:crypto";
+
 const DEFAULT_LOCAL_API_BASE_URL = "http://localhost:8000";
 const PRODUCTION_PRIVATE_API_URLS = [
   "http://api.railway.internal:8000",
@@ -7,8 +10,11 @@ const PRODUCTION_PRIVATE_API_URLS = [
   "http://rentalradarapi.railway.internal:8000",
 ];
 
-export const ORG_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "00000000-0000-0000-0000-000000000001";
-export const USER_ID = process.env.NEXT_PUBLIC_USER_ID ?? "00000000-0000-0000-0000-000000000002";
+const FALLBACK_ORG_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "00000000-0000-0000-0000-000000000001";
+const FALLBACK_USER_ID = process.env.NEXT_PUBLIC_USER_ID ?? "00000000-0000-0000-0000-000000000002";
+
+export const ORG_ID = FALLBACK_ORG_ID;
+export const USER_ID = FALLBACK_USER_ID;
 
 export type BackendFetchOptions = RequestInit & {
   json?: unknown;
@@ -20,8 +26,9 @@ export type BackendFetchOptions = RequestInit & {
 export async function fetchBackend(path: string, options: BackendFetchOptions = {}): Promise<Response> {
   const headers = new Headers(options.headers);
   headers.set("Accept", headers.get("Accept") ?? "application/json");
-  headers.set("X-Organization-Id", headers.get("X-Organization-Id") ?? ORG_ID);
-  headers.set("X-User-Id", headers.get("X-User-Id") ?? USER_ID);
+  const authContext = await backendAuthContext();
+  headers.set("X-Organization-Id", headers.get("X-Organization-Id") ?? authContext.organizationId);
+  headers.set("X-User-Id", headers.get("X-User-Id") ?? authContext.userId);
   if (options.json !== undefined) {
     headers.set("Content-Type", "application/json");
   }
@@ -44,6 +51,37 @@ export async function fetchBackend(path: string, options: BackendFetchOptions = 
   const cause = lastError instanceof Error ? ` ${lastError.message}` : "";
   const warning = warnings.length ? ` ${warnings.join(" ")}` : "";
   throw new Error(`Backend API is unreachable. Set API_BASE_URL to the backend service URL.${warning}${cause}`);
+}
+
+async function backendAuthContext() {
+  try {
+    const { orgId, userId } = await auth();
+    if (userId) {
+      return {
+        organizationId: uuidOrDerive(orgId ?? userId, "organization"),
+        userId: uuidOrDerive(userId, "user"),
+      };
+    }
+  } catch {
+    // Fall back below for local scripts, unauthenticated health checks, and tests.
+  }
+
+  return {
+    organizationId: FALLBACK_ORG_ID,
+    userId: FALLBACK_USER_ID,
+  };
+}
+
+function uuidOrDerive(value: string, namespace: string) {
+  const trimmed = value.trim();
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trimmed)) {
+    return trimmed;
+  }
+  const chars = createHash("sha256").update(`rentalradar:${namespace}:${trimmed}`).digest("hex").slice(0, 32).split("");
+  chars[12] = "5";
+  chars[16] = ((Number.parseInt(chars[16], 16) & 0x3) | 0x8).toString(16);
+  const hex = chars.join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function backendBaseUrls() {

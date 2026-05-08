@@ -16,9 +16,6 @@ import type { LucideIcon } from "lucide-react";
 import { PropertyResponse, TargetOccupancyPlanResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const ORG_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "00000000-0000-0000-0000-000000000001";
-const USER_ID = process.env.NEXT_PUBLIC_USER_ID ?? "00000000-0000-0000-0000-000000000002";
-
 type Props = {
   propertyId?: string;
   properties?: PropertyResponse[];
@@ -57,8 +54,6 @@ export function TargetOccupancyPlanner({ propertyId, properties = [], compact = 
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
-          "X-Organization-Id": ORG_ID,
-          "X-User-Id": USER_ID,
         },
         body: JSON.stringify({
           target_month: `${targetMonth}-01`,
@@ -100,14 +95,14 @@ export function TargetOccupancyPlanner({ propertyId, properties = [], compact = 
         </div>
       </div>
 
-      <form onSubmit={submit} className="mt-5 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_170px_160px_auto] lg:items-end">
+      <form onSubmit={submit} className="mt-5 grid gap-3 md:grid-cols-2 2xl:grid-cols-[minmax(0,1fr)_150px_150px] 2xl:items-end">
         {!propertyId ? (
-          <label className="grid gap-2">
+          <label className="grid min-w-0 gap-2">
             <span className="text-sm font-medium text-slate-700">Property</span>
             <select
               value={selectedPropertyId}
               onChange={(event) => setSelectedPropertyId(event.target.value)}
-              className="h-11 rounded-xl border border-cyan-900/10 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-cyan-600"
+              className="h-11 min-w-0 rounded-xl border border-cyan-900/10 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-cyan-600"
             >
               {properties.length ? null : <option value="">Add a property first</option>}
               {properties.map((property) => (
@@ -118,7 +113,7 @@ export function TargetOccupancyPlanner({ propertyId, properties = [], compact = 
             </select>
           </label>
         ) : (
-          <div className="rounded-2xl border border-cyan-900/10 bg-slate-50 px-4 py-3">
+          <div className="min-w-0 rounded-2xl border border-cyan-900/10 bg-slate-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Property</p>
             <p className="mt-1 truncate text-sm font-medium text-slate-950">{selectedProperty?.formatted_address ?? "New property"}</p>
           </div>
@@ -155,7 +150,7 @@ export function TargetOccupancyPlanner({ propertyId, properties = [], compact = 
         <button
           type="submit"
           disabled={!activePropertyId || status === "loading"}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-cyan-950 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-cyan-950 disabled:cursor-not-allowed disabled:opacity-50 md:col-span-2 2xl:col-span-3"
         >
           {status === "loading" ? <LoaderCircle className="size-4 animate-spin" /> : <Target className="size-4" />}
           Build plan
