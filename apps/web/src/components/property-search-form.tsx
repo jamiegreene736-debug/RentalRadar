@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { Check, LoaderCircle, MapPin, Plus, Search } from "lucide-react";
 
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 const initialState: ActionState = { ok: false, message: "" };
 
 export function PropertySearchForm() {
+  const router = useRouter();
   const [state, action] = useActionState(addPropertyAction, initialState);
   const [address, setAddress] = useState("");
   const [analysisStarted, setAnalysisStarted] = useState(false);
@@ -61,6 +63,12 @@ export function PropertySearchForm() {
   }, [address]);
 
   const propertyId = state.propertyId;
+
+  useEffect(() => {
+    if (state.ok && state.propertyId) {
+      router.refresh();
+    }
+  }, [router, state.ok, state.propertyId]);
 
   return (
     <Card className="border-cyan-900/10 bg-white/90 shadow-[0_28px_90px_rgba(14,116,144,0.14)]">

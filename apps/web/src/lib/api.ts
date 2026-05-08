@@ -25,7 +25,7 @@ async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `API request failed: ${response.status}`);
+    throw new Error(readApiError(text) || `API request failed: ${response.status}`);
   }
   if (response.status === 204) {
     return undefined as T;
@@ -53,11 +53,33 @@ export async function createProperty(payload: {
 export async function getProperties(): Promise<PropertyResponse[]> {
   try {
     return await apiFetch<PropertyResponse[]>("/properties", {
-      next: { revalidate: 20 },
+      cache: "no-store",
     });
   } catch {
     return [];
   }
+}
+
+function readApiError(text: string) {
+  if (!text) return "";
+  try {
+    const payload = JSON.parse(text) as { detail?: unknown; message?: unknown; error?: unknown };
+    const detail = payload.detail ?? payload.message ?? payload.error;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail
+        .map((item) => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object" && "msg" in item && typeof item.msg === "string") return item.msg;
+          return null;
+        })
+        .filter(Boolean)
+        .join(" ");
+    }
+  } catch {
+    return text;
+  }
+  return text;
 }
 
 export async function getMarketRates(propertyId: string): Promise<MarketRatesResponse> {

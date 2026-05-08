@@ -2,17 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { currentUser } from "@clerk/nextjs/server";
 
 import {
   connectDirectOta,
   connectPms,
   createBillingCheckout,
   createProperty,
+  getProperties,
   pushDirectPricing,
   pushPricing,
   revokeDirectOta,
   runPricing,
   submitDirectOta2fa,
+  updateAccountProfile,
 } from "@/lib/api";
 import { ActionState } from "@/lib/types";
 
@@ -40,11 +43,29 @@ export async function addPropertyAction(_: ActionState, formData: FormData): Pro
         .filter(Boolean),
     });
     await runPricing(property.id).catch(() => null);
-    revalidatePath("/");
+    revalidatePropertyRoutes();
     return { ok: true, message: "Property added and market scan queued.", propertyId: property.id };
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : "Unable to add property." };
+    const message = error instanceof Error ? error.message : "Unable to add property.";
+    if (message.includes("Free tier allows 1 active property")) {
+      const [property] = await getProperties();
+      if (property) {
+        revalidatePropertyRoutes();
+        return {
+          ok: true,
+          message: "This property is already in your account. I loaded it into the planner.",
+          propertyId: property.id,
+        };
+      }
+    }
+    return { ok: false, message };
   }
+}
+
+function revalidatePropertyRoutes() {
+  revalidatePath("/");
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/properties");
 }
 
 export async function connectPmsAction(_: ActionState, formData: FormData): Promise<ActionState> {
@@ -167,4 +188,29 @@ export async function subscribeAction(_: ActionState, formData: FormData): Promi
     return { ok: false, message: error instanceof Error ? error.message : "Unable to start billing checkout." };
   }
   redirect(session.url);
+}
+
+export async function updateAccountProfileAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const user = await currentUser();
+    const primaryEmail = user?.primaryEmailAddress?.emailAddress;
+    await updateAccountProfile({
+      email: String(formData.get("email") || primaryEmail || ""),
+      first_name: String(formData.get("firstName") ?? ""),
+      last_name: String(formData.get("lastName") ?? ""),
+      phone_number: String(formData.get("phoneNumber") ?? ""),
+      company_name: String(formData.get("companyName") ?? ""),
+      job_title: String(formData.get("jobTitle") ?? ""),
+      timezone: String(formData.get("timezone") || "America/New_York"),
+      locale: String(formData.get("locale") || "en-US"),
+      notification_email: String(formData.get("notificationEmail") || formData.get("email") || primaryEmail || ""),
+      marketing_opt_in: formData.get("marketingOptIn") === "on",
+      avatar_url: user?.imageUrl,
+      clerk_user_id: user?.id,
+    });
+    revalidatePath("/dashboard/account");
+    return { ok: true, message: "Account profile saved." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Unable to save account profile." };
+  }
 }

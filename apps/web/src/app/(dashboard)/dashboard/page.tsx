@@ -25,6 +25,7 @@ const setupSteps = [
 
 export default async function DashboardOverviewPage() {
   const properties = await getProperties();
+  const hasProperties = properties.length > 0;
 
   return (
     <div className="grid gap-6">
@@ -45,9 +46,11 @@ export default async function DashboardOverviewPage() {
               <Chrome className="size-5" />
             </span>
             <div>
-              <p className="font-semibold text-slate-950">No live data yet</p>
+              <p className="font-semibold text-slate-950">{hasProperties ? "Property ready for planning" : "No live data yet"}</p>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                Sample properties, scan counts, and fake agent activity have been removed from the new-account view.
+                {hasProperties
+                  ? "Choose an occupancy goal and month to build the first headed-browser-backed rate plan."
+                  : "Sample properties, scan counts, and fake agent activity have been removed from the new-account view."}
               </p>
             </div>
           </div>
@@ -60,7 +63,7 @@ export default async function DashboardOverviewPage() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        <EmptyMetric label="Properties" value="0" />
+        <EmptyMetric label="Properties" value={String(properties.length)} />
         <EmptyMetric label="Market scans" value="0" />
         <EmptyMetric label="Connected channels" value="0" />
       </div>
