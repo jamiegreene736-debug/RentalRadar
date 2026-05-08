@@ -9,28 +9,29 @@ const tiers = [
   {
     name: "Starter",
     price: "$3",
+    bestFor: "First listing",
     cadence: "Daily live scans",
     feature: "AI price explanations",
-    bestFor: "First listing",
   },
   {
     name: "Growth",
     price: "$6",
-    cadence: "4x daily live scans",
-    feature: "PMS pushes and alerts",
     bestFor: "2-10 listings",
+    cadence: "4x daily live scans",
+    feature: "PMS pushes & alerts",
   },
   {
     name: "Pro",
     price: "$9",
-    cadence: "Hourly live scans",
-    feature: "Extension queue and triggers",
     bestFor: "Portfolio operators",
+    cadence: "Hourly live scans",
+    feature: "Extension queue & triggers",
   },
 ];
 
 const proofPoints = [
-  "Flat fee per property with no revenue-share surprise",
+  "Flat fee per property",
+  "No revenue share",
   "Live market checks and real booking data included",
   "Approved rate updates included on Pro",
 ];
@@ -46,7 +47,8 @@ export function PricingTeaser() {
             Simple pricing that does not grow with your revenue.
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-300">
-            RentalRadar keeps pricing simple: $3-$9 per property/month, live AI scans included, and no percentage skim from your best months.
+            RentalRadar keeps pricing simple: $3-$9 per property/month, live AI scans included, and zero percentage skim
+            from your best months.
           </p>
         </SectionReveal>
 
@@ -81,7 +83,7 @@ export function PricingTeaser() {
             <span className="grid size-12 place-items-center rounded-2xl bg-cyan-300 text-slate-950">
               <ShieldCheck className="size-6" />
             </span>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               {proofPoints.map((point) => (
                 <p key={point} className="flex items-start gap-2 text-sm leading-6 text-slate-300">
                   <CheckCircle2 className="mt-1 size-4 shrink-0 text-teal-200" />

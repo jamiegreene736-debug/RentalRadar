@@ -20,11 +20,16 @@ export function HeroSection() {
             The Next Generation of Vacation Rental Pricing Is Here
           </h1>
           <p className="mt-4 max-w-3xl text-pretty text-lg leading-7 text-slate-300 sm:text-[1.2rem]">
-            RentalRadar combines AI agents running Playwright in real headed Chrome with booking pace, occupancy, PMS,
-            and revenue signals. See what guests see right now, grounded by what properties are really booking for.
+            Our AI agents browse Airbnb, VRBO, Booking.com, and every comp listing live, exactly the way a guest sees
+            them right now. They combine that market view with your actual bookings, occupancy, and revenue data so you
+            get pricing recommendations you can trust.
+          </p>
+          <p className="mt-4 max-w-3xl text-pretty text-base leading-7 text-cyan-50">
+            <span className="font-semibold text-white">No stale APIs. No guessing.</span> Just an army of AI agents
+            doing the manual research for you 24/7.
           </p>
           <div className="mt-4 grid max-w-3xl gap-3 sm:grid-cols-3">
-            {["Playwright + headed Chrome", "Live OTA comp evidence", "Real booking performance"].map((signal) => (
+            {["Live comp research", "Actual booking data", "24/7 AI agents"].map((signal) => (
               <div key={signal} className="rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-2.5 text-sm font-medium text-cyan-50">
                 {signal}
               </div>
@@ -44,12 +49,13 @@ export function HeroSection() {
             >
               <Link href="#demo">
                 <PlayCircle />
-                Watch 47-second demo
+                47-second overview
               </Link>
             </Button>
           </div>
           <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3.5 text-sm text-slate-300 backdrop-blur">
-            <span className="text-white">The ultimate combination:</span> live browser evidence, PMS/channel data, booking pace, occupancy, and revenue strategy in one AI pricing engine.
+            <span className="text-white">Live market checks right now:</span> VRBO oceanfront villa, Airbnb downtown
+            loft, Booking.com resort suite, and your PM website checkout page.
           </div>
         </div>
         <AnimatedBrowserDemo />

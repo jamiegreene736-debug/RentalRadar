@@ -32,7 +32,7 @@ const agents = [
     cursor: { x: [0, 96, 120, 48, 82], y: [0, 28, 92, 104, 58] },
   },
   {
-    channel: "PM Website",
+    channel: "Your PM Website",
     property: "Direct booking",
     action: "checkout page",
     price: "$274",

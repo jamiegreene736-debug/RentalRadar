@@ -6,20 +6,20 @@ const steps = [
   {
     icon: Bot,
     title: "Set up the property",
-    copy: "Start with the property, strategy, and connected data sources. RentalRadar learns the home, the market, your pricing limits, and the owner goals.",
-    visual: ["Property strategy", "Owner guardrails", "Connected data"],
+    copy: "We learn your home, your market, your pricing limits, and your owner goals. Simple one-time setup.",
+    visual: ["Property profile", "Owner guardrails", "Pricing limits"],
   },
   {
     icon: Chrome,
     title: "Check the live market",
-    copy: "RentalRadar reviews Airbnb, VRBO, Booking.com, and public comp pages the way a traveler would see them today.",
+    copy: "Our AI agents review Airbnb, VRBO, Booking.com, and comp listings the exact same way a guest would see them today.",
     visual: ["Guest-visible rates", "Comp calendars", "Open nights"],
   },
   {
     icon: Puzzle,
-    title: "Use real booking performance",
-    copy: "Current market rates are combined with booked rates, occupancy, lead time, pickup, revenue pace, and channel data so recommendations are financially grounded.",
-    visual: ["Booked rates", "Occupancy pace", "Ready to publish"],
+    title: "Combine with real booking performance",
+    copy: "We layer in your actual booked rates, occupancy, lead time, pickup, and channel data so every recommendation is financially grounded.",
+    visual: ["Booked rates", "Occupancy pace", "Financially grounded"],
   },
 ];
 
@@ -33,7 +33,7 @@ export function HowItWorks() {
             Live market checks meet real booking performance.
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-300">
-            Market feeds show part of the story. Your booking pace shows another. RentalRadar combines both: what guests can book right now and what properties are actually earning.
+            Market feeds only tell half the story. Your booking pace tells the other half. RentalRadar combines both.
           </p>
         </SectionReveal>
 
@@ -62,7 +62,7 @@ export function HowItWorks() {
 
         <div className="mt-8 flex items-center justify-center gap-2 text-sm text-cyan-100">
           <Sparkles className="size-4" />
-          If the market moves, RentalRadar can re-check the comps, compare them against booking performance, and explain the rate change.
+          If the market moves, RentalRadar re-checks the comps, compares them to your bookings, and clearly explains why a rate change makes sense.
         </div>
       </div>
     </section>

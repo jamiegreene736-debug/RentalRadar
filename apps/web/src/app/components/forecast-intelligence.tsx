@@ -4,10 +4,10 @@ import type { LucideIcon } from "lucide-react";
 import { SectionReveal } from "@/app/components/section-reveal";
 
 const proofStats = [
-  ["Hybrid", "pricing engine", "headed-browser evidence plus booking, PMS, channel, and revenue data"],
-  ["365", "daily rate decisions", "a full-year calendar view with fresh recommendations"],
+  ["365", "daily rate decisions", "full-year calendar view with fresh recommendations every day"],
   ["24/7", "market monitoring", "traveler demand, comp movement, booking pace, and availability changes"],
-  ["Real", "booking context", "booked nightly rates, occupancy, lead time, booking pace, gaps, and owner targets"],
+  ["98", "listing health score", "pricing, availability, review strength, and conversion signals"],
+  ["6", "chart lenses", "revenue, occupancy, average rate, lead time, pickup, and pace"],
 ];
 
 const strategyModes = [
@@ -60,7 +60,8 @@ export function ForecastIntelligence() {
             The price is not guessed. It is witnessed, measured, and explained.
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-300">
-            Playwright agents capture live traveler-facing market evidence while booking data anchors the model in reality. Every recommendation can show both the market move and the booking signal behind it.
+            Our AI agents capture what guests actually see right now, while your real booking data keeps everything
+            anchored in reality. Every recommendation shows which market move and which booking signal drove the decision.
           </p>
         </SectionReveal>
 
@@ -132,9 +133,11 @@ export function ForecastIntelligence() {
               </div>
             </div>
 
-            <div className="mt-6 flex flex-wrap items-center gap-3 rounded-3xl border border-amber-200/[0.16] bg-amber-200/[0.07] px-5 py-4 text-sm text-amber-50">
-              <CalendarDays className="size-5 text-amber-200" />
-              Market rates, booking pace, seasonal rules, weekend adjustments, gap-night discounts, and price limits stay visible before rates are applied.
+            <div className="mt-6 flex flex-wrap items-center gap-3 rounded-3xl border border-cyan-200/25 bg-slate-900/80 px-5 py-4 text-sm font-medium leading-6 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <CalendarDays className="size-5 text-cyan-200" />
+              <span>
+                Market rates, booking pace, seasonal rules, weekend adjustments, gap-night discounts, and price limits are all visible before any rate is applied.
+              </span>
             </div>
           </SectionReveal>
         </div>

@@ -10,11 +10,11 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   metadataBase: new URL("https://rentalradar.ai"),
   title: {
-    default: "RentalRadar.ai | AI Agents for Next-Generation Vacation Rental Pricing",
+    default: "RentalRadar.ai | Your Personal Army of AI Agents for Smarter Vacation Rental Pricing",
     template: "%s | RentalRadar.ai",
   },
   description:
-    "RentalRadar combines Playwright AI agents running real headed Chrome with booking, pacing, occupancy, and PMS revenue data for next-generation vacation rental pricing.",
+    "RentalRadar's AI agents browse Airbnb, VRBO, Booking.com, and comp listings live, then combine that market view with your bookings, occupancy, and revenue data.",
   keywords: [
     "vacation rental dynamic pricing",
     "Airbnb pricing",
@@ -25,9 +25,9 @@ export const metadata: Metadata = {
     "PMS pricing",
   ],
   openGraph: {
-    title: "RentalRadar.ai | AI Agents for Next-Generation Vacation Rental Pricing",
+    title: "RentalRadar.ai | Your Personal Army of AI Agents for Smarter Vacation Rental Pricing",
     description:
-      "RentalRadar combines AI agents running Playwright in real headed Chrome with real booking and revenue data for next-generation vacation rental pricing.",
+      "AI agents browse live vacation rental comps the way guests see them, then combine that evidence with your real booking and revenue data.",
     url: "https://rentalradar.ai",
     siteName: "RentalRadar.ai",
     images: [
@@ -43,9 +43,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "RentalRadar.ai | AI Agents for Next-Generation Vacation Rental Pricing",
+    title: "RentalRadar.ai | Your Personal Army of AI Agents for Smarter Vacation Rental Pricing",
     description:
-      "Playwright AI agents, real headed Chrome, live market evidence, and actual booking data in one pricing engine.",
+      "Live AI market checks, real headed Chrome, and your actual booking data in one smarter vacation rental pricing engine.",
     images: ["/opengraph-image"],
   },
   alternates: {

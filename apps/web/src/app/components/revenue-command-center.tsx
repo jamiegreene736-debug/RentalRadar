@@ -58,10 +58,11 @@ export function RevenueCommandCenter() {
         <SectionReveal className="mx-auto max-w-3xl text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-emerald-200">Complete revenue command center</p>
           <h2 className="mt-4 text-balance text-4xl font-semibold tracking-normal text-white sm:text-6xl">
-            The next generation pricing stack in one live workspace.
+            Everything you need in one clean AI workspace.
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-300">
-            RentalRadar unifies live browser evidence, real booking data, comp sets, portfolio controls, performance analytics, and reporting in one AI command center.
+            Live market checks, real booking data, comp sets, portfolio controls, analytics, reporting, and change history
+            all live inside one complete revenue command center.
           </p>
         </SectionReveal>
 

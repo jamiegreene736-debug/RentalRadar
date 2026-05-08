@@ -16,10 +16,11 @@ export function ExtensionSpotlight() {
             Update approved rates, even without a PMS.
           </h2>
           <p className="mt-6 text-lg leading-8 text-slate-300">
-            If your team is not connected to a property management system yet, RentalRadar can still help you apply approved rates in the host dashboards you already use.
+            Review the recommendation, approve it, then apply the update directly in your host dashboards. Even without a
+            PMS, your team can still move approved prices where they need to go.
           </p>
           <p className="mt-4 text-lg leading-8 text-cyan-100">
-            You stay in control: review the recommendation first, approve it, then apply the update when you are ready.
+            You stay in full control. RentalRadar never stores your passwords.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button asChild className="h-12 rounded-full bg-white px-6 text-slate-950 hover:bg-cyan-100">
@@ -46,13 +47,13 @@ export function ExtensionSpotlight() {
           <div className="relative rounded-[32px] border border-white/[0.12] bg-white/[0.05] p-6 shadow-[0_40px_120px_rgba(0,0,0,0.4)]">
             <div className="grid gap-4 sm:grid-cols-2">
               <StoreBadge icon={Chrome} title="Chrome Web Store" copy="Install in 30 seconds" />
-              <StoreBadge icon={Compass} title="Safari Extensions" copy="Native macOS workflow" />
+              <StoreBadge icon={Compass} title="Safari Extension" copy="Native macOS workflow" />
             </div>
             <div className="mt-6 rounded-3xl border border-cyan-200/[0.14] bg-slate-950 p-5">
               <div className="flex items-center justify-between border-b border-white/10 pb-4">
                 <div>
                   <p className="text-sm text-slate-400">RentalRadar Extension</p>
-                  <p className="text-xl font-semibold text-white">3 approved nights ready</p>
+                  <p className="text-xl font-semibold text-white">Review and apply approved rates instantly</p>
                 </div>
                 <span className="rounded-full bg-emerald-300/10 px-3 py-1 text-xs text-emerald-200">ready to review</span>
               </div>
