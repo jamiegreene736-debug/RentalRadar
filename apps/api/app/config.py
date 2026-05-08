@@ -45,6 +45,22 @@ class Settings(BaseSettings):
     scraper_stealth: bool = True
     cors_origins: list[AnyHttpUrl] | list[str] = Field(default_factory=lambda: ["*"])
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        """Rewrite the DATABASE_URL dialect to psycopg (psycopg3).
+
+        Railway and many tooling defaults emit ``postgresql://`` or
+        ``postgresql+psycopg2://``.  Both resolve to the legacy psycopg2
+        driver which is not installed.  Convert them to
+        ``postgresql+psycopg://`` so SQLAlchemy uses the psycopg3 driver
+        declared in pyproject.toml (``psycopg[binary]>=3.2``).
+        """
+        for prefix in ("postgresql+psycopg2://", "postgresql://"):
+            if value.startswith(prefix):
+                return "postgresql+psycopg://" + value[len(prefix):]
+        return value
+
     @field_validator("scraper_proxy_urls", mode="before")
     @classmethod
     def parse_proxy_urls(cls, value: str | list[str]) -> list[str]:
