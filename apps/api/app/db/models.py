@@ -163,6 +163,49 @@ class Organization(Base, TimestampMixin):
     billing_email: Mapped[str | None] = mapped_column(Text)
 
     properties: Mapped[list[Property]] = relationship(back_populates="organization")
+    members: Mapped[list[OrganizationMember]] = relationship(back_populates="organization")
+
+
+class AppUser(Base, TimestampMixin):
+    __tablename__ = "app_users"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    email: Mapped[str] = mapped_column(Text, unique=True)
+    full_name: Mapped[str | None] = mapped_column(Text)
+    default_organization_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        index=True,
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    default_organization: Mapped[Organization | None] = relationship(
+        "Organization",
+        foreign_keys=[default_organization_id],
+    )
+    memberships: Mapped[list[OrganizationMember]] = relationship(back_populates="user")
+
+
+class OrganizationMember(Base, TimestampMixin):
+    __tablename__ = "organization_members"
+    __table_args__ = (UniqueConstraint("organization_id", "user_id"),)
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        index=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("app_users.id", ondelete="CASCADE"),
+        index=True,
+    )
+    role: Mapped[str] = mapped_column(Text, default="member")
+
+    organization: Mapped[Organization] = relationship(back_populates="members")
+    user: Mapped[AppUser] = relationship(back_populates="memberships")
 
 
 class Property(Base, TimestampMixin):
