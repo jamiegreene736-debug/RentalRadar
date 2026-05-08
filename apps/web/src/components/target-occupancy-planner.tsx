@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
@@ -37,6 +37,12 @@ export function TargetOccupancyPlanner({ propertyId, properties = [], compact = 
     () => properties.find((property) => property.id === activePropertyId),
     [activePropertyId, properties],
   );
+
+  useEffect(() => {
+    if (!propertyId && !selectedPropertyId && properties[0]?.id) {
+      setSelectedPropertyId(properties[0].id);
+    }
+  }, [properties, propertyId, selectedPropertyId]);
 
   if (compact && !activePropertyId) return null;
 

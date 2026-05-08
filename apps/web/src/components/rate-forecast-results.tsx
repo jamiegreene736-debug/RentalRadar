@@ -52,8 +52,6 @@ export function RateForecastResults({ propertyId }: { propertyId?: string }) {
     };
   }, [months, propertyId]);
 
-  if (!propertyId) return null;
-
   const monthly = forecast?.monthly ?? [];
   const maxRevenue = Math.max(...monthly.map((month) => month.estimated_revenue_cents), 1);
   const firstNights = forecast?.nights.slice(0, 14) ?? [];
@@ -63,6 +61,8 @@ export function RateForecastResults({ propertyId }: { propertyId?: string }) {
       forecast.nights.reduce((sum, night) => sum + night.recommended_rate_cents, 0) / forecast.nights.length,
     );
   }, [forecast]);
+
+  if (!propertyId) return null;
 
   return (
     <section className="mt-5 rounded-[24px] border border-cyan-900/10 bg-white p-5 shadow-[0_28px_90px_rgba(14,116,144,0.12)]">
