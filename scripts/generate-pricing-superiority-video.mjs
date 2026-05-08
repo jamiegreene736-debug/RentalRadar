@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import sharp from "sharp";
 
@@ -10,23 +10,90 @@ const duration = 47;
 const frameCount = duration * fps;
 const outputDir = "apps/web/public";
 const frameDir = ".video-frames/pricing-superiority";
+const audioDir = ".video-frames/pricing-superiority-audio";
 const videoPath = `${outputDir}/pricing-superiority-overview.mp4`;
 const posterPath = `${outputDir}/pricing-superiority-poster.jpg`;
+const voicePath = `${audioDir}/voice.aiff`;
+
+const voiceover = [
+  "Most pricing tools are guessing with old data.",
+  "Here's why RentalRadar gets it right every single time.",
+  "Other tools rely on stale APIs and limited information.",
+  "They don't see what guests are actually seeing today.",
+  "RentalRadar uses an army of AI agents that do the manual research for you.",
+  "They check every listing live, exactly the way a guest sees it right now,",
+  "and combine it with your real bookings and revenue data.",
+  "So you get clear, trustworthy pricing recommendations that actually make you more money",
+  "with way less guesswork.",
+  "Smarter pricing. Higher revenue. Zero guesswork. That's RentalRadar.",
+].join(" ");
+
+const scenes = [
+  {
+    start: 0,
+    end: 8,
+    eyebrow: "The old way",
+    headline: "Most pricing tools are guessing with old data.",
+    subhead: "RentalRadar checks what guests see right now.",
+    overlay: "Old data in. Stale guess out.",
+  },
+  {
+    start: 8,
+    end: 22,
+    eyebrow: "The problem",
+    headline: "Other tools miss what guests are actually seeing today.",
+    subhead: "Limited feeds cannot see every live listing, open night, or guest-visible price.",
+    overlay: "Stale feeds miss today's market.",
+  },
+  {
+    start: 22,
+    end: 35,
+    eyebrow: "The RentalRadar difference",
+    headline: "An army of AI agents does the manual research for you.",
+    subhead: "They check Airbnb, VRBO, Booking.com, and comp properties live.",
+    overlay: "Live guest prices + your real bookings.",
+  },
+  {
+    start: 35,
+    end: 43,
+    eyebrow: "The result",
+    headline: "Clear pricing recommendations you can actually trust.",
+    subhead: "Make more money with far less guesswork.",
+    overlay: "Know why every price changed.",
+  },
+  {
+    start: 43,
+    end: 47,
+    eyebrow: "RentalRadar.ai",
+    headline: "Smarter pricing. Higher revenue. Zero guesswork.",
+    subhead: "That's RentalRadar.",
+    overlay: "Start free. No credit card.",
+  },
+];
+
+const liveChecks = [
+  ["VRBO", "Oceanfront villa", "$318", "calendar open live", "#0f766e"],
+  ["Airbnb", "Downtown loft", "$286", "guest rate live", "#be123c"],
+  ["Booking.com", "Resort suite", "$301", "availability live", "#1d4ed8"],
+  ["Your PM Website", "Direct booking", "$274", "checkout page live", "#b45309"],
+];
 
 mkdirSync(outputDir, { recursive: true });
 rmSync(frameDir, { recursive: true, force: true });
+rmSync(audioDir, { recursive: true, force: true });
 mkdirSync(frameDir, { recursive: true });
+mkdirSync(audioDir, { recursive: true });
 
 const clamp = (value, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 const lerp = (a, b, t) => a + (b - a) * t;
-const easeInOut = (t) => {
+const ease = (t) => {
   const x = clamp(t);
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 };
-const pulse = (t) => (Math.sin(t * Math.PI * 2) + 1) / 2;
-const sceneProgress = (time, start, end) => clamp((time - start) / (end - start));
-const sceneAlpha = (time, start, end, fade = 0.9) =>
-  clamp(Math.min(sceneProgress(time, start, start + fade), sceneProgress(time, end, end - fade)));
+const pulse = (time, speed = 1) => (Math.sin(time * Math.PI * 2 * speed) + 1) / 2;
+const progress = (time, start, end) => clamp((time - start) / (end - start));
+const sceneAlpha = (time, start, end, fade = 0.55) =>
+  clamp(Math.min(progress(time, start, start + fade), progress(time, end, end - fade)));
 const xml = (value) =>
   String(value)
     .replaceAll("&", "&amp;")
@@ -34,292 +101,259 @@ const xml = (value) =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 
-function text({ x, y, value, size = 32, weight = 600, fill = "#f8fafc", anchor = "start", opacity = 1, family = "Inter, Arial, sans-serif" }) {
+function text({ x, y, value, size = 32, weight = 700, fill = "#f8fafc", anchor = "start", opacity = 1, family = "Inter, Arial, sans-serif" }) {
   return `<text x="${x}" y="${y}" font-family="${family}" font-size="${size}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}" opacity="${opacity}">${xml(value)}</text>`;
+}
+
+function multiline({ x, y, lines, size = 42, weight = 800, fill = "#0f172a", lineHeight = 1.14, anchor = "start", opacity = 1 }) {
+  return lines
+    .map((line, index) =>
+      text({ x, y: y + index * size * lineHeight, value: line, size, weight, fill, anchor, opacity }),
+    )
+    .join("");
 }
 
 function rect({ x, y, w, h, r = 16, fill = "none", stroke = "none", sw = 1, opacity = 1, filter = "" }) {
   return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" opacity="${opacity}" ${filter ? `filter="${filter}"` : ""}/>`;
 }
 
-function line({ x1, y1, x2, y2, stroke = "#67e8f9", sw = 3, opacity = 1 }) {
-  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" opacity="${opacity}"/>`;
-}
-
 function cursor(x, y, opacity = 1) {
   return `
     <g transform="translate(${x} ${y})" opacity="${opacity}">
-      <path d="M0 0 L0 31 L9 23 L15 39 L23 36 L16 21 L28 21 Z" fill="#f8fafc" stroke="#0f172a" stroke-width="2"/>
-      <circle cx="7" cy="7" r="18" fill="none" stroke="#22d3ee" stroke-width="2" opacity="0.35"/>
+      <path d="M0 0 L0 30 L9 23 L15 38 L23 35 L16 20 L28 20 Z" fill="#f8fafc" stroke="#0f172a" stroke-width="2"/>
+      <circle cx="8" cy="7" r="18" fill="none" stroke="#22d3ee" stroke-width="2" opacity="0.32"/>
     </g>`;
 }
 
-function browserChrome(time, address, body, accent = "#22d3ee", opacity = 1) {
-  const glow = 0.14 + 0.12 * pulse(time * 0.4);
+function browserShell(time, address, body, opacity = 1) {
   return `
     <g opacity="${opacity}">
-      ${rect({ x: 112, y: 96, w: 1056, h: 520, r: 30, fill: "#f8fafc", stroke: "rgba(14,116,144,0.24)", sw: 2, filter: "url(#softShadow)" })}
-      <path d="M142 96 H1138 A30 30 0 0 1 1168 126 V172 H112 V126 A30 30 0 0 1 142 96 Z" fill="#eef8fb"/>
-      <circle cx="154" cy="136" r="8" fill="#fb7185"/>
-      <circle cx="181" cy="136" r="8" fill="#fbbf24"/>
-      <circle cx="208" cy="136" r="8" fill="#34d399"/>
-      ${rect({ x: 252, y: 116, w: 590, h: 40, r: 20, fill: "#ffffff", stroke: "rgba(14,116,144,0.18)" })}
-      ${text({ x: 282, y: 142, value: address, size: 17, weight: 600, fill: "#0f172a" })}
-      <circle cx="1032" cy="136" r="20" fill="${accent}" opacity="${glow}"/>
-      ${text({ x: 960, y: 142, value: "headed Chrome", size: 16, weight: 700, fill: "#0e7490" })}
-      <clipPath id="browserBodyClip"><rect x="112" y="172" width="1056" height="444" rx="0"/></clipPath>
+      ${rect({ x: 98, y: 118, w: 1084, h: 456, r: 30, fill: "#ffffff", stroke: "rgba(14,116,144,0.22)", sw: 2, filter: "url(#softShadow)" })}
+      <path d="M128 118 H1152 A30 30 0 0 1 1182 148 V190 H98 V148 A30 30 0 0 1 128 118 Z" fill="#eef8fb"/>
+      <circle cx="142" cy="153" r="8" fill="#fb7185"/>
+      <circle cx="169" cy="153" r="8" fill="#fbbf24"/>
+      <circle cx="196" cy="153" r="8" fill="#34d399"/>
+      ${rect({ x: 236, y: 134, w: 560, h: 38, r: 19, fill: "#ffffff", stroke: "rgba(14,116,144,0.18)" })}
+      ${text({ x: 266, y: 159, value: address, size: 16, weight: 700, fill: "#334155" })}
+      <circle cx="1034" cy="153" r="18" fill="#22d3ee" opacity="${0.12 + 0.12 * pulse(time, 0.5)}"/>
+      ${text({ x: 926, y: 159, value: "live market check", size: 15, weight: 800, fill: "#0e7490" })}
+      <clipPath id="browserBodyClip"><rect x="98" y="190" width="1084" height="384" rx="0"/></clipPath>
       <g clip-path="url(#browserBodyClip)">${body}</g>
     </g>`;
 }
 
-function aiPanel(time, lines, x = 884, y = 205, opacity = 1) {
-  return `
-    <g opacity="${opacity}">
-      ${rect({ x, y, w: 236, h: 294, r: 22, fill: "#0f172a", stroke: "rgba(103,232,249,0.32)", sw: 1.5 })}
-      <circle cx="${x + 36}" cy="${y + 36}" r="17" fill="#22d3ee" opacity="${0.18 + pulse(time) * 0.16}"/>
-      ${text({ x: x + 60, y: y + 42, value: "AI navigator", size: 17, weight: 800, fill: "#e0f2fe" })}
-      ${lines
-        .map((lineValue, i) => {
-          const active = pulse(time * 0.55 + i * 0.17) > 0.42;
-          return `
-            <g transform="translate(${x + 22} ${y + 78 + i * 42})">
-              <circle cx="8" cy="8" r="8" fill="${active ? "#34d399" : "#164e63"}"/>
-              ${text({ x: 28, y: 13, value: lineValue, size: 15, weight: active ? 760 : 600, fill: active ? "#ccfbf1" : "#94a3b8" })}
-            </g>`;
-        })
-        .join("")}
-    </g>`;
+function oldDataScene(time, alpha) {
+  const p = ease(progress(time, 0, 8));
+  const needle = lerp(-45, 16, p);
+  return browserShell(
+    time,
+    "old-data-pricing-tool.example",
+    `
+      ${rect({ x: 98, y: 190, w: 1084, h: 384, r: 0, fill: "#f8fafc" })}
+      ${rect({ x: 150, y: 242, w: 418, h: 230, r: 26, fill: "#fff7ed", stroke: "rgba(180,83,9,0.24)", sw: 2 })}
+      ${text({ x: 184, y: 292, value: "Old data", size: 42, weight: 950, fill: "#9a3412" })}
+      ${text({ x: 184, y: 340, value: "limited info", size: 28, weight: 760, fill: "#b45309" })}
+      ${text({ x: 184, y: 388, value: "best guess", size: 28, weight: 760, fill: "#b45309" })}
+      <g transform="translate(796 358)">
+        <circle cx="0" cy="0" r="104" fill="#ecfeff" stroke="#22d3ee" stroke-width="3" opacity="0.82"/>
+        <path d="M-70 40 A82 82 0 0 1 70 40" fill="none" stroke="#0e7490" stroke-width="8" stroke-linecap="round" opacity="0.35"/>
+        <path d="M0 0 L${Math.cos((needle - 90) * Math.PI / 180) * 76} ${Math.sin((needle - 90) * Math.PI / 180) * 76}" stroke="#f59e0b" stroke-width="8" stroke-linecap="round"/>
+        <circle cx="0" cy="0" r="10" fill="#0f172a"/>
+        ${text({ x: 0, y: 148, value: "RentalRadar checks live instead", size: 22, weight: 900, fill: "#0f172a", anchor: "middle" })}
+      </g>
+    `,
+    alpha,
+  );
 }
 
-function calendarGrid(time, x, y, opacity = 1) {
-  const cells = Array.from({ length: 28 }, (_, index) => {
-    const col = index % 7;
-    const row = Math.floor(index / 7);
-    const hot = (index + Math.floor(time * 2)) % 9 === 0;
-    const fill = hot ? "#fef3c7" : index % 5 === 0 ? "#cffafe" : "#eef8fb";
-    const stroke = hot ? "#f59e0b" : "rgba(14,116,144,0.16)";
+function staleApiScene(time, alpha) {
+  const cards = ["Yesterday's rates", "Missing open nights", "No guest view"].map((label, index) => {
+    const y = 250 + index * 80;
+    const active = pulse(time + index * 0.2, 0.45) > 0.55;
     return `
-      <g transform="translate(${x + col * 61} ${y + row * 52})">
-        ${rect({ x: 0, y: 0, w: 48, h: 40, r: 10, fill, stroke, sw: hot ? 2 : 1 })}
-        ${text({ x: 10, y: 17, value: `$${240 + ((index * 13) % 86)}`, size: 12, weight: 800, fill: hot ? "#92400e" : "#0f172a" })}
-        <path d="M9 28 H36" stroke="${hot ? "#f59e0b" : "#22d3ee"}" stroke-width="4" stroke-linecap="round" opacity="0.72"/>
+      <g transform="translate(150 ${y})">
+        ${rect({ x: 0, y: 0, w: 380, h: 58, r: 18, fill: active ? "#fee2e2" : "#ffffff", stroke: active ? "#fb7185" : "rgba(15,23,42,0.1)", sw: active ? 2 : 1 })}
+        <circle cx="30" cy="29" r="11" fill="${active ? "#fb7185" : "#cbd5e1"}"/>
+        ${text({ x: 58, y: 36, value: label, size: 23, weight: 850, fill: "#0f172a" })}
       </g>`;
   }).join("");
-  return `<g opacity="${opacity}">${cells}</g>`;
+  return browserShell(
+    time,
+    "market-feed.example/data",
+    `
+      ${rect({ x: 98, y: 190, w: 1084, h: 384, r: 0, fill: "#f8fafc" })}
+      ${cards}
+      ${rect({ x: 630, y: 245, w: 406, h: 228, r: 28, fill: "#0f172a", stroke: "rgba(103,232,249,0.26)", sw: 2 })}
+      ${text({ x: 834, y: 300, value: "What guests see today?", size: 28, weight: 920, fill: "#e0f2fe", anchor: "middle" })}
+      ${text({ x: 834, y: 356, value: "Other tools often", size: 23, weight: 700, fill: "#94a3b8", anchor: "middle" })}
+      ${text({ x: 834, y: 392, value: "cannot see it.", size: 34, weight: 950, fill: "#fef3c7", anchor: "middle" })}
+    `,
+    alpha,
+  );
 }
 
-function compCards(time, opacity = 1) {
-  const providers = [
-    ["Airbnb", "$286", "guest sees this now", "#fb7185"],
-    ["VRBO", "$301", "weekend demand", "#60a5fa"],
-    ["Booking.com", "$274", "gap-night signal", "#fbbf24"],
-  ];
-  return providers
-    .map(([name, price, note, color], i) => {
-      const y = 224 + i * 94;
-      const scan = 0.25 + 0.22 * pulse(time * 0.7 + i * 0.23);
+function liveResearchScene(time, alpha) {
+  const scan = (time - 22) % 4;
+  const rows = liveChecks
+    .map(([name, property, price, note, color], index) => {
+      const x = 144 + (index % 2) * 494;
+      const y = 244 + Math.floor(index / 2) * 136;
+      const active = Math.floor(scan) === index || pulse(time + index * 0.33, 0.6) > 0.68;
       return `
-        <g opacity="${opacity}" transform="translate(${128 + i * 12} ${y})">
-          ${rect({ x: 0, y: 0, w: 335, h: 72, r: 18, fill: "#ffffff", stroke: "rgba(14,116,144,0.16)", sw: 1.5 })}
-          <circle cx="34" cy="36" r="17" fill="${color}" opacity="0.2"/>
-          ${text({ x: 64, y: 31, value: name, size: 18, weight: 800, fill: "#0f172a" })}
-          ${text({ x: 64, y: 53, value: note, size: 13, weight: 600, fill: "#64748b" })}
-          ${text({ x: 280, y: 43, value: price, size: 22, weight: 900, fill: "#0f172a", anchor: "middle" })}
-          <path d="M14 ${60 * scan} H320" stroke="${color}" stroke-width="3" stroke-linecap="round" opacity="0.45"/>
+        <g transform="translate(${x} ${y})">
+          ${rect({ x: 0, y: 0, w: 432, h: 104, r: 22, fill: active ? "#ecfeff" : "#ffffff", stroke: active ? "#22d3ee" : "rgba(14,116,144,0.14)", sw: active ? 2.4 : 1.4 })}
+          <circle cx="40" cy="38" r="18" fill="${color}" opacity="0.18"/>
+          ${text({ x: 70, y: 36, value: name, size: 23, weight: 950, fill: "#0f172a" })}
+          ${text({ x: 70, y: 64, value: property, size: 16, weight: 720, fill: "#64748b" })}
+          ${text({ x: 352, y: 50, value: price, size: 30, weight: 950, fill: color, anchor: "middle" })}
+          ${text({ x: 70, y: 88, value: note, size: 14, weight: 760, fill: "#0e7490" })}
         </g>`;
     })
     .join("");
+  const cursorX = lerp(170, 1030, ease(progress((time - 22) % 6, 0, 6)));
+  const cursorY = 328 + Math.sin((time - 22) * 1.6) * 112;
+  return browserShell(
+    time,
+    "airbnb.com  vrbo.com  booking.com  direct-site.com",
+    `
+      ${rect({ x: 98, y: 190, w: 1084, h: 384, r: 0, fill: "#f8fafc" })}
+      ${rows}
+      ${cursor(cursorX, cursorY, 1)}
+    `,
+    alpha,
+  );
 }
 
-function barChart(time, opacity = 1) {
-  const bars = [168, 218, 184, 266, 238, 310, 282];
-  return `
-    <g opacity="${opacity}">
-      ${rect({ x: 138, y: 235, w: 430, h: 260, r: 24, fill: "#ffffff", stroke: "rgba(14,116,144,0.16)" })}
-      ${text({ x: 170, y: 278, value: "Live comps + booking pace", size: 22, weight: 850, fill: "#0f172a" })}
-      ${bars
-        .map((bar, i) => {
-          const animated = bar * (0.78 + 0.22 * easeInOut(sceneProgress(time % 6, i * 0.45, i * 0.45 + 1.7)));
-          const x = 174 + i * 50;
-          return `${rect({ x, y: 458 - animated * 0.62, w: 28, h: animated * 0.62, r: 8, fill: i === 5 ? "#f59e0b" : i > 3 ? "#14b8a6" : "#22d3ee", opacity: 0.84 })}`;
-        })
-        .join("")}
-      ${line({ x1: 164, y1: 402, x2: 532, y2: 320, stroke: "#0f766e", sw: 4, opacity: 0.82 })}
-      ${text({ x: 172, y: 524, value: "Market feed alone misses booking momentum", size: 15, weight: 700, fill: "#475569" })}
-    </g>`;
+function combineScene(time, alpha) {
+  const bars = [118, 176, 146, 214, 198, 252, 226];
+  const barSvg = bars
+    .map((bar, index) => {
+      const h = bar * (0.74 + 0.26 * ease(progress(time, 27 + index * 0.25, 31 + index * 0.25)));
+      const x = 186 + index * 50;
+      return rect({ x, y: 490 - h, w: 30, h, r: 8, fill: index > 4 ? "#14b8a6" : "#22d3ee", opacity: 0.86 });
+    })
+    .join("");
+  return browserShell(
+    time,
+    "rentalradar.ai/your-bookings",
+    `
+      ${rect({ x: 98, y: 190, w: 1084, h: 384, r: 0, fill: "#f8fafc" })}
+      ${rect({ x: 150, y: 240, w: 428, h: 292, r: 26, fill: "#ffffff", stroke: "rgba(14,116,144,0.16)" })}
+      ${text({ x: 184, y: 286, value: "Your real bookings", size: 32, weight: 950, fill: "#0f172a" })}
+      ${barSvg}
+      ${text({ x: 184, y: 530, value: "occupancy, booking pace, and revenue", size: 16, weight: 760, fill: "#64748b" })}
+      ${rect({ x: 660, y: 240, w: 392, h: 292, r: 26, fill: "#0f172a", stroke: "rgba(103,232,249,0.3)", sw: 2 })}
+      ${text({ x: 856, y: 296, value: "Live guest prices", size: 28, weight: 950, fill: "#e0f2fe", anchor: "middle" })}
+      ${text({ x: 856, y: 352, value: "+", size: 46, weight: 950, fill: "#67e8f9", anchor: "middle" })}
+      ${text({ x: 856, y: 406, value: "Your booking numbers", size: 28, weight: 950, fill: "#e0f2fe", anchor: "middle" })}
+      ${text({ x: 856, y: 470, value: "smarter price", size: 34, weight: 950, fill: "#fef3c7", anchor: "middle" })}
+    `,
+    alpha,
+  );
 }
 
-function decisionGrid(time, opacity = 1) {
-  const tiles = [
-    ["Fri", "$312", "raise", "#dcfce7"],
-    ["Sat", "$329", "raise", "#dcfce7"],
-    ["Sun", "$246", "fill", "#fef3c7"],
-    ["Mon", "$218", "hold", "#e0f2fe"],
-    ["Tue", "$211", "hold", "#e0f2fe"],
-    ["Wed", "$224", "event", "#fee2e2"],
+function recommendationScene(time, alpha) {
+  const rows = [
+    ["Fri", "$312", "raise"],
+    ["Sat", "$329", "raise"],
+    ["Sun", "$246", "fill gap"],
+    ["Mon", "$218", "hold"],
   ];
+  const rowSvg = rows
+    .map(([day, price, action], index) => {
+      const active = pulse(time + index * 0.15, 0.5) > 0.48;
+      return `
+        <g transform="translate(168 ${252 + index * 68})">
+          ${rect({ x: 0, y: 0, w: 468, h: 52, r: 16, fill: active ? "#ecfeff" : "#ffffff", stroke: active ? "#22d3ee" : "rgba(14,116,144,0.13)", sw: active ? 2 : 1 })}
+          ${text({ x: 24, y: 34, value: day, size: 22, weight: 850, fill: "#475569" })}
+          ${text({ x: 210, y: 34, value: price, size: 25, weight: 950, fill: "#0f172a", anchor: "middle" })}
+          ${text({ x: 390, y: 34, value: action, size: 18, weight: 850, fill: "#0e7490", anchor: "middle" })}
+        </g>`;
+    })
+    .join("");
+  return browserShell(
+    time,
+    "rentalradar.ai/recommendations",
+    `
+      ${rect({ x: 98, y: 190, w: 1084, h: 384, r: 0, fill: "#f8fafc" })}
+      ${text({ x: 150, y: 226, value: "Clear recommendations", size: 32, weight: 950, fill: "#0f172a" })}
+      ${rowSvg}
+      ${rect({ x: 710, y: 264, w: 342, h: 202, r: 26, fill: "#f0fdf4", stroke: "rgba(20,184,166,0.28)", sw: 2 })}
+      ${text({ x: 881, y: 326, value: "Trust the price", size: 31, weight: 950, fill: "#0f172a", anchor: "middle" })}
+      ${text({ x: 881, y: 374, value: "because you can see", size: 22, weight: 760, fill: "#475569", anchor: "middle" })}
+      ${text({ x: 881, y: 410, value: "why it changed.", size: 30, weight: 950, fill: "#0f766e", anchor: "middle" })}
+    `,
+    alpha,
+  );
+}
+
+function finalScene(time, alpha) {
   return `
-    <g opacity="${opacity}">
-      ${rect({ x: 139, y: 218, w: 496, h: 284, r: 26, fill: "#ffffff", stroke: "rgba(14,116,144,0.16)" })}
-      ${text({ x: 172, y: 260, value: "Recommended moves", size: 24, weight: 900, fill: "#0f172a" })}
-      ${tiles
-        .map(([day, price, tag, fill], i) => {
-          const x = 172 + (i % 3) * 146;
-          const y = 292 + Math.floor(i / 3) * 88;
-          const active = pulse(time * 0.45 + i * 0.13) > 0.58;
-          return `
-            <g transform="translate(${x} ${y})">
-              ${rect({ x: 0, y: 0, w: 122, h: 66, r: 16, fill, stroke: active ? "#0e7490" : "rgba(14,116,144,0.12)", sw: active ? 2.2 : 1 })}
-              ${text({ x: 16, y: 25, value: day, size: 14, weight: 800, fill: "#475569" })}
-              ${text({ x: 16, y: 51, value: price, size: 22, weight: 900, fill: "#0f172a" })}
-              ${text({ x: 92, y: 25, value: tag, size: 12, weight: 800, fill: "#0e7490", anchor: "middle" })}
-            </g>`;
-        })
-        .join("")}
+    <g opacity="${alpha}">
+      <rect width="${width}" height="${height}" fill="#050816"/>
+      <circle cx="640" cy="350" r="${170 + 14 * pulse(time, 0.45)}" fill="none" stroke="#22d3ee" stroke-width="2" opacity="0.24"/>
+      <circle cx="640" cy="350" r="${250 + 18 * pulse(time, 0.35)}" fill="none" stroke="#14b8a6" stroke-width="2" opacity="0.14"/>
+      ${text({ x: 640, y: 214, value: "RentalRadar.ai", size: 44, weight: 950, fill: "#e0f2fe", anchor: "middle" })}
+      ${multiline({
+        x: 640,
+        y: 314,
+        anchor: "middle",
+        lines: ["Smarter pricing.", "Higher revenue.", "Zero guesswork."],
+        size: 50,
+        weight: 950,
+        fill: "#ffffff",
+        lineHeight: 1.16,
+      })}
+      ${rect({ x: 474, y: 530, w: 332, h: 54, r: 27, fill: "#67e8f9", stroke: "none" })}
+      ${text({ x: 640, y: 565, value: "Start free - no credit card", size: 20, weight: 900, fill: "#082f49", anchor: "middle" })}
     </g>`;
 }
 
-function explanationStack(time, opacity = 1) {
-  const items = [
-    ["Demand", "Weekend comps are 14% higher than your current rate"],
-    ["Pace", "Bookings are arriving 9 days faster than last month"],
-    ["Guardrails", "Owner minimums and max nightly swing respected"],
-    ["Action", "Push PMS first, extension fallback queued"],
-  ];
+function titleOverlay(time) {
+  const scene = scenes.find((entry) => time >= entry.start && time < entry.end) ?? scenes.at(-1);
+  const alpha = sceneAlpha(time, scene.start, scene.end, 0.4);
   return `
-    <g opacity="${opacity}">
-      ${items
-        .map(([title, copy], i) => {
-          const y = 212 + i * 75;
-          const active = pulse(time * 0.48 + i * 0.12) > 0.45;
-          return `
-            <g transform="translate(140 ${y})">
-              ${rect({ x: 0, y: 0, w: 560, h: 58, r: 17, fill: active ? "#ecfeff" : "#ffffff", stroke: active ? "#22d3ee" : "rgba(14,116,144,0.15)", sw: active ? 2 : 1 })}
-              <circle cx="30" cy="29" r="13" fill="${active ? "#14b8a6" : "#bae6fd"}"/>
-              ${text({ x: 58, y: 25, value: title, size: 15, weight: 900, fill: "#0f172a" })}
-              ${text({ x: 58, y: 45, value: copy, size: 14, weight: 650, fill: "#475569" })}
-            </g>`;
-        })
-        .join("")}
+    <g opacity="${alpha}">
+      ${rect({ x: 74, y: 36, w: 1132, h: 58, r: 29, fill: "rgba(255,255,255,0.78)", stroke: "rgba(14,116,144,0.18)", sw: 1 })}
+      ${text({ x: 110, y: 72, value: scene.eyebrow, size: 17, weight: 900, fill: "#0e7490" })}
+      ${text({ x: 1170, y: 72, value: `${Math.floor(time + 1)} / 47 sec`, size: 15, weight: 760, fill: "#64748b", anchor: "end" })}
     </g>`;
 }
 
-function finalPush(time, opacity = 1) {
-  const progress = easeInOut(sceneProgress(time % 8, 0.5, 6.8));
+function sceneContent(time) {
+  const a1 = sceneAlpha(time, 0, 8);
+  const a2 = sceneAlpha(time, 8, 22);
+  const a3 = sceneAlpha(time, 22, 35);
+  const a4 = sceneAlpha(time, 35, 43);
+  const a5 = sceneAlpha(time, 43, 47);
+
   return `
-    <g opacity="${opacity}">
-      ${rect({ x: 144, y: 218, w: 465, h: 282, r: 26, fill: "#ffffff", stroke: "rgba(14,116,144,0.16)" })}
-      ${text({ x: 176, y: 262, value: "Ready to publish", size: 25, weight: 900, fill: "#0f172a" })}
-      ${["PMS API", "Chrome extension", "Owner guardrails"].map((item, i) => `
-        <g transform="translate(178 ${294 + i * 50})">
-          <circle cx="12" cy="12" r="12" fill="#dcfce7"/>
-          <path d="M6 12 L11 17 L19 7" stroke="#047857" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-          ${text({ x: 38, y: 18, value: item, size: 17, weight: 760, fill: "#0f172a" })}
-        </g>`).join("")}
-      ${rect({ x: 178, y: 444, w: 364, h: 18, r: 9, fill: "#e2e8f0" })}
-      ${rect({ x: 178, y: 444, w: 364 * progress, h: 18, r: 9, fill: "#22d3ee" })}
-      ${text({ x: 360, y: 533, value: "+$18,420 projected annual upside", size: 30, weight: 950, fill: "#0f766e", anchor: "middle" })}
-    </g>`;
+    ${oldDataScene(time, a1)}
+    ${staleApiScene(time, a2)}
+    ${liveResearchScene(time, a3)}
+    ${combineScene(time, sceneAlpha(time, 29, 35))}
+    ${recommendationScene(time, a4)}
+    ${finalScene(time, a5)}
+  `;
 }
 
-function sceneBody(time) {
-  const s1 = sceneAlpha(time, 0, 7);
-  const s2 = sceneAlpha(time, 6, 15);
-  const s3 = sceneAlpha(time, 14, 24);
-  const s4 = sceneAlpha(time, 23, 33);
-  const s5 = sceneAlpha(time, 32, 40);
-  const s6 = sceneAlpha(time, 39, 47);
-
-  const titleSlide = `
-    <g opacity="${s1}">
-      ${rect({ x: 112, y: 172, w: 1056, h: 444, r: 0, fill: "#f8fafc" })}
-      <path d="M150 526 C285 428 366 498 495 389 C598 303 697 313 822 220 C920 148 1036 179 1132 126" fill="none" stroke="#22d3ee" stroke-width="10" stroke-linecap="round" opacity="0.18"/>
-      ${text({ x: 165, y: 272, value: "A pricing engine that sees live demand", size: 36, weight: 950, fill: "#0f172a" })}
-      ${text({ x: 165, y: 323, value: "and understands booking pace.", size: 34, weight: 850, fill: "#0e7490" })}
-      ${text({ x: 166, y: 382, value: "Headed Chrome evidence + revenue history + direct execution.", size: 21, weight: 680, fill: "#475569" })}
-      ${aiPanel(time, ["open browser", "read visible rates", "collect evidence"], 836, 238, s1)}
+function lowerThird(time) {
+  const scene = scenes.find((entry) => time >= entry.start && time < entry.end) ?? scenes.at(-1);
+  const alpha = sceneAlpha(time, scene.start, scene.end, 0.4);
+  const lines = scene.headline.length > 52
+    ? scene.headline.replace(" with ", " with|").split("|")
+    : [scene.headline];
+  return `
+    <g opacity="${alpha}">
+      ${rect({ x: 74, y: 604, w: 1132, h: 82, r: 24, fill: "rgba(15,23,42,0.88)", stroke: "rgba(103,232,249,0.22)", sw: 1.4 })}
+      ${multiline({ x: 110, y: 636, lines, size: lines.length > 1 ? 24 : 27, weight: 920, fill: "#ffffff", lineHeight: 1.05 })}
+      ${text({ x: 110, y: 670, value: scene.overlay, size: 17, weight: 760, fill: "#a7f3ff" })}
     </g>`;
-
-  const visitX = lerp(225, 654, easeInOut(sceneProgress(time, 7, 14)));
-  const visitY = lerp(306, 464, easeInOut(sceneProgress(time, 7, 14)));
-  const scanBody = `
-    <g opacity="${s2}">
-      ${rect({ x: 112, y: 172, w: 1056, h: 444, r: 0, fill: "#f8fafc" })}
-      ${text({ x: 138, y: 216, value: "The AI navigates guest-visible sites in a real browser", size: 28, weight: 900, fill: "#0f172a" })}
-      ${compCards(time, s2)}
-      ${aiPanel(time, ["Airbnb calendar", "VRBO price check", "Booking gap nights"], 858, 226, s2)}
-      ${cursor(visitX, visitY, s2)}
-    </g>`;
-
-  const chartBody = `
-    <g opacity="${s3}">
-      ${rect({ x: 112, y: 172, w: 1056, h: 444, r: 0, fill: "#f8fafc" })}
-      ${text({ x: 138, y: 216, value: "Then it cross-checks live comps against what you are actually earning", size: 27, weight: 900, fill: "#0f172a" })}
-      ${barChart(time, s3)}
-      ${calendarGrid(time, 652, 248, s3)}
-      ${aiPanel(time, ["booking pace", "lead time", "occupancy", "rate limits"], 862, 224, s3)}
-    </g>`;
-
-  const decisionBody = `
-    <g opacity="${s4}">
-      ${rect({ x: 112, y: 172, w: 1056, h: 444, r: 0, fill: "#f8fafc" })}
-      ${text({ x: 138, y: 216, value: "Superior pricing is knowing which nights to raise, hold, or fill", size: 28, weight: 900, fill: "#0f172a" })}
-      ${decisionGrid(time, s4)}
-      ${rect({ x: 676, y: 246, w: 416, h: 205, r: 24, fill: "#0f172a", stroke: "rgba(34,211,238,0.35)" })}
-      ${text({ x: 708, y: 296, value: "Competitor feed", size: 18, weight: 800, fill: "#94a3b8" })}
-      ${text({ x: 708, y: 335, value: "market estimate only", size: 28, weight: 900, fill: "#e2e8f0" })}
-      ${text({ x: 708, y: 391, value: "RentalRadar", size: 18, weight: 900, fill: "#67e8f9" })}
-      ${text({ x: 708, y: 431, value: "live evidence + bookings", size: 28, weight: 950, fill: "#ccfbf1" })}
-    </g>`;
-
-  const explainBody = `
-    <g opacity="${s5}">
-      ${rect({ x: 112, y: 172, w: 1056, h: 444, r: 0, fill: "#f8fafc" })}
-      ${text({ x: 138, y: 216, value: "Every recommendation comes with evidence, not mystery math", size: 28, weight: 900, fill: "#0f172a" })}
-      ${explanationStack(time, s5)}
-      ${aiPanel(time, ["why this price", "what changed", "how to publish"], 828, 236, s5)}
-    </g>`;
-
-  const finalBody = `
-    <g opacity="${s6}">
-      ${rect({ x: 112, y: 172, w: 1056, h: 444, r: 0, fill: "#f8fafc" })}
-      ${text({ x: 138, y: 216, value: "Publish through your PMS, extension, or supervised browser flow", size: 28, weight: 900, fill: "#0f172a" })}
-      ${finalPush(time, s6)}
-      ${aiPanel(time, ["verify target page", "apply guarded rates", "log evidence"], 828, 236, s6)}
-    </g>`;
-
-  const address =
-    time < 7
-      ? "rentalradar.ai/ai-pricing"
-      : time < 15
-        ? ["airbnb.com/hosting/calendar", "vrbo.com/dashboard/rates", "admin.booking.com/rates"][Math.floor(time * 0.58) % 3]
-        : time < 24
-          ? "rentalradar.ai/live-market-evidence"
-          : time < 33
-            ? "rentalradar.ai/recommendations"
-            : time < 40
-              ? "rentalradar.ai/price-explainer"
-              : "rentalradar.ai/publish";
-
-  return browserChrome(time, address, `${titleSlide}${scanBody}${chartBody}${decisionBody}${explainBody}${finalBody}`);
 }
 
 function svgFrame(frame) {
   const time = frame / fps;
-  const globalProgress = frame / (frameCount - 1);
-  const beam = 100 + Math.sin(time * 0.7) * 34;
-  const headline =
-    time < 15
-      ? "See the live market"
-      : time < 33
-        ? "Price from evidence"
-        : "Push with guardrails";
-  const subhead =
-    time < 15
-      ? "The AI watches actual guest-visible rates in headed Chrome."
-      : time < 33
-        ? "Recommendations blend comps, occupancy, pickup, and revenue pace."
-        : "Every move is explainable, bounded, and ready to execute.";
+  const beam = 92 + Math.sin(time * 0.65) * 34;
 
   return `
   <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
@@ -333,11 +367,11 @@ function svgFrame(frame) {
         <stop offset="1" stop-color="#fff7ed"/>
       </linearGradient>
       <radialGradient id="cyanGlow" cx="24%" cy="16%" r="60%">
-        <stop offset="0" stop-color="#67e8f9" stop-opacity="0.42"/>
+        <stop offset="0" stop-color="#67e8f9" stop-opacity="0.44"/>
         <stop offset="1" stop-color="#67e8f9" stop-opacity="0"/>
       </radialGradient>
       <radialGradient id="goldGlow" cx="84%" cy="78%" r="52%">
-        <stop offset="0" stop-color="#fbbf24" stop-opacity="0.2"/>
+        <stop offset="0" stop-color="#fbbf24" stop-opacity="0.18"/>
         <stop offset="1" stop-color="#fbbf24" stop-opacity="0"/>
       </radialGradient>
     </defs>
@@ -345,14 +379,10 @@ function svgFrame(frame) {
     <rect width="${width}" height="${height}" fill="url(#cyanGlow)"/>
     <rect width="${width}" height="${height}" fill="url(#goldGlow)"/>
     <path d="M-40 ${beam} C220 ${beam + 80} 314 ${beam - 58} 520 ${beam + 25} S916 ${beam + 88} 1340 ${beam - 16}" fill="none" stroke="#22d3ee" stroke-width="2" opacity="0.18"/>
-    <path d="M-40 ${beam + 390} C240 ${beam + 260} 390 ${beam + 430} 610 ${beam + 318} S986 ${beam + 238} 1340 ${beam + 305}" fill="none" stroke="#14b8a6" stroke-width="2" opacity="0.13"/>
-    ${text({ x: 112, y: 54, value: "RentalRadar", size: 24, weight: 950, fill: "#0f172a" })}
-    ${text({ x: 312, y: 54, value: headline, size: 24, weight: 850, fill: "#0e7490" })}
-    ${text({ x: 112, y: 666, value: subhead, size: 22, weight: 720, fill: "#334155" })}
-    ${rect({ x: 878, y: 646, w: 290, h: 12, r: 6, fill: "rgba(14,116,144,0.14)" })}
-    ${rect({ x: 878, y: 646, w: 290 * globalProgress, h: 12, r: 6, fill: "#0e7490" })}
-    ${text({ x: 1168, y: 633, value: "47 sec overview", size: 15, weight: 800, fill: "#0f172a", anchor: "end" })}
-    ${sceneBody(time)}
+    <path d="M-40 ${beam + 408} C240 ${beam + 268} 390 ${beam + 430} 610 ${beam + 318} S986 ${beam + 238} 1340 ${beam + 305}" fill="none" stroke="#14b8a6" stroke-width="2" opacity="0.13"/>
+    ${titleOverlay(time)}
+    ${sceneContent(time)}
+    ${lowerThird(time)}
   </svg>`;
 }
 
@@ -361,9 +391,36 @@ for (let frame = 0; frame < frameCount; frame += 1) {
   await sharp(Buffer.from(svgFrame(frame))).png().toFile(name);
 }
 
-await sharp(Buffer.from(svgFrame(Math.floor(fps * 18))))
+await sharp(Buffer.from(svgFrame(Math.floor(fps * 2.2))))
   .jpeg({ quality: 88, mozjpeg: true })
   .toFile(posterPath);
+
+const sayAvailable = spawnSync("which", ["say"], { encoding: "utf8" }).status === 0;
+let voiceDuration = duration;
+let voiceFilter = "anull";
+let voiceInput = ["-f", "lavfi", "-t", String(duration), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"];
+
+if (sayAvailable) {
+  const say = spawnSync("say", ["-v", "Alex", "-r", "150", "-o", voicePath, voiceover], {
+    stdio: "inherit",
+  });
+
+  if (say.status !== 0) {
+    process.exit(say.status ?? 1);
+  }
+
+  const probe = spawnSync(
+    "ffprobe",
+    ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", voicePath],
+    { encoding: "utf8" },
+  );
+  voiceDuration = Number.parseFloat(probe.stdout.trim()) || duration;
+  const tempo = clamp(voiceDuration / duration, 0.5, 2);
+  voiceFilter = `atempo=${tempo.toFixed(6)},apad,atrim=0:${duration}`;
+  voiceInput = ["-i", voicePath];
+} else {
+  console.warn("macOS 'say' command not found. Generating the video with music only.");
+}
 
 const ffmpeg = spawnSync(
   "ffmpeg",
@@ -373,23 +430,95 @@ const ffmpeg = spawnSync(
     String(fps),
     "-i",
     join(frameDir, "frame-%04d.png"),
+    ...voiceInput,
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=164.81:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=246.94:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=329.63:sample_rate=44100",
+    "-filter_complex",
+    `[1:a]${voiceFilter},volume=1.45[voice];[2:a]volume=0.012,afade=t=in:st=0:d=1.2,afade=t=out:st=44.5:d=2.5[m1];[3:a]volume=0.006,afade=t=in:st=0:d=1.2,afade=t=out:st=44.5:d=2.5[m2];[4:a]volume=0.004,afade=t=in:st=0:d=1.2,afade=t=out:st=44.5:d=2.5[m3];[voice][m1][m2][m3]amix=inputs=4:duration=longest,atrim=0:${duration}[a]`,
+    "-map",
+    "0:v:0",
+    "-map",
+    "[a]",
     "-c:v",
     "libx264",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
     "-pix_fmt",
     "yuv420p",
     "-movflags",
     "+faststart",
     "-crf",
-    "23",
+    "22",
     videoPath,
   ],
   { stdio: "inherit" },
 );
 
 rmSync(frameDir, { recursive: true, force: true });
+rmSync(audioDir, { recursive: true, force: true });
 
 if (ffmpeg.status !== 0) {
   process.exit(ffmpeg.status ?? 1);
 }
 
-console.log(`Generated ${videoPath} and ${posterPath}`);
+const storyboardPath = `${outputDir}/pricing-superiority-storyboard.txt`;
+const storyboard = `RentalRadar.ai 47-second explainer
+
+Voiceover voice:
+Warm, friendly, confident American male, age 35-42. Conversational, trustworthy, clear, positive, and helpful.
+
+Full voiceover script:
+${voiceover}
+
+Storyboard:
+0-8 sec - Hook
+Visual: Old pricing dashboard, stale-data cards, and a guess meter moving from old data to RentalRadar live checks.
+On-screen text: Most pricing tools are guessing with old data. / Old data in. Stale guess out.
+
+8-22 sec - Problem with other tools
+Visual: Cards for yesterday's rates, missing open nights, and no guest view beside a dark panel asking what guests see today.
+On-screen text: Other tools miss what guests are actually seeing today. / Stale feeds miss today's market.
+
+22-35 sec - RentalRadar difference
+Visual: Four live check cards for VRBO, Airbnb, Booking.com, and Your PM Website with a cursor clicking through live prices.
+On-screen text: An army of AI agents does the manual research for you. / Live guest prices + your real bookings.
+
+29-35 sec - Booking data blend
+Visual: Your booking bars combine with live guest prices to create a smarter price.
+On-screen text: Live guest prices + your booking numbers = smarter price.
+
+35-43 sec - Benefit
+Visual: Daily recommendation rows show raise, hold, and fill-gap moves with a friendly explanation card.
+On-screen text: Clear pricing recommendations you can actually trust. / Know why every price changed.
+
+43-47 sec - Close
+Visual: RentalRadar.ai end card with radar rings and a Start free call to action.
+On-screen text: Smarter pricing. Higher revenue. Zero guesswork. / Start free - no credit card.
+
+Background music:
+Upbeat, modern, clean, light electronic pulse under the voice. Friendly momentum, not corporate, and quiet enough that the voice stays primary.
+`;
+
+rmSync(storyboardPath, { force: true });
+await import("node:fs/promises").then(({ writeFile }) => writeFile(storyboardPath, storyboard));
+
+console.log(`Generated ${videoPath}, ${posterPath}, and ${storyboardPath}`);
+console.log(`Voiceover source duration: ${voiceDuration.toFixed(2)}s, final video duration: ${duration}s`);
