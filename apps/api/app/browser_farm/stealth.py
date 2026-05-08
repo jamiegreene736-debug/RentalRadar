@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import random
 from dataclasses import dataclass, field
 
@@ -60,9 +61,18 @@ async def apply_stealth_patches(context: BrowserContext, profile: FingerprintPro
     This avoids stale third-party stealth packages and keeps each patch explicit.
     """
 
-    await context.add_init_script(
-        """
-        ({ hardwareConcurrency, deviceMemory, languages, webglVendor, webglRenderer }) => {
+    payload = json.dumps(
+        {
+            "hardwareConcurrency": profile.hardware_concurrency,
+            "deviceMemory": profile.device_memory,
+            "languages": list(profile.languages),
+            "webglVendor": profile.webgl_vendor,
+            "webglRenderer": profile.webgl_renderer,
+        }
+    )
+    script = """
+        (() => {
+          const { hardwareConcurrency, deviceMemory, languages, webglVendor, webglRenderer } = __PAYLOAD__;
           const defineGetter = (obj, prop, value) => {
             try {
               Object.defineProperty(obj, prop, { get: () => value, configurable: true });
@@ -147,16 +157,9 @@ async def apply_stealth_patches(context: BrowserContext, profile: FingerprintPro
                 : originalQuery(parameters)
             );
           }
-        }
-        """,
-        {
-            "hardwareConcurrency": profile.hardware_concurrency,
-            "deviceMemory": profile.device_memory,
-            "languages": list(profile.languages),
-            "webglVendor": profile.webgl_vendor,
-            "webglRenderer": profile.webgl_renderer,
-        },
-    )
+        }})();
+        """.replace("__PAYLOAD__", payload)
+    await context.add_init_script(script)
 
 
 async def humanize_page(page: Page) -> None:
