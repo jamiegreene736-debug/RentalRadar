@@ -119,6 +119,27 @@
   color: #0e7490 !important;
 }
 
+.radar-light .text-emerald-50,
+.radar-light .text-emerald-100,
+.radar-light .text-emerald-200,
+.radar-light .text-emerald-300,
+.radar-light [class*="text-emerald-"] {
+  color: #047857 !important;
+}
+
+.radar-light [class*="bg-emerald-300/"],
+.radar-light [class*="bg-emerald-200/"],
+.radar-light [class*="bg-emerald-100/"],
+.radar-light [class*="bg-emerald-50"] {
+  background: rgba(16, 185, 129, 0.16) !important;
+}
+
+.radar-light [class*="border-emerald-"],
+.radar-light [class*="ring-emerald-"] {
+  border-color: rgba(4, 120, 87, 0.28) !important;
+  --tw-ring-color: rgba(4, 120, 87, 0.28) !important;
+}
+
 .radar-light [class*="shadow-[0_40px"],
 .radar-light [class*="shadow-[0_32px"],
 .radar-light [class*="shadow-[0_24px"] {
