@@ -5,6 +5,8 @@ import { PropertySearchForm } from "@/components/property-search-form";
 import { TargetOccupancyPlanner } from "@/components/target-occupancy-planner";
 import { getProperties } from "@/lib/api";
 
+export const dynamic = "force-dynamic";
+
 const setupSteps = [
   {
     icon: Building2,
