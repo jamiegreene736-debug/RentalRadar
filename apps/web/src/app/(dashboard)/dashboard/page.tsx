@@ -2,6 +2,7 @@ import { Building2, Chrome, PlugZap, Radar } from "lucide-react";
 
 import { GlassCard, PanelTitle } from "@/app/(dashboard)/components/glass-card";
 import { PropertySearchForm } from "@/components/property-search-form";
+import { RateForecastResults } from "@/components/rate-forecast-results";
 import { TargetOccupancyPlanner } from "@/components/target-occupancy-planner";
 import { getProperties } from "@/lib/api";
 
@@ -28,6 +29,7 @@ const setupSteps = [
 export default async function DashboardOverviewPage() {
   const properties = await getProperties();
   const hasProperties = properties.length > 0;
+  const activeProperty = properties[0];
 
   return (
     <div className="grid gap-6">
@@ -63,6 +65,8 @@ export default async function DashboardOverviewPage() {
         <PropertySearchForm />
         <TargetOccupancyPlanner properties={properties} />
       </div>
+
+      <RateForecastResults propertyId={activeProperty?.id} />
 
       <div className="grid gap-5 md:grid-cols-3">
         <EmptyMetric label="Properties" value={String(properties.length)} />

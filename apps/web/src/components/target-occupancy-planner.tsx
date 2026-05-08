@@ -162,8 +162,8 @@ export function TargetOccupancyPlanner({ propertyId, properties = [], compact = 
       ) : null}
 
       {plan ? (
-        <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+        <div className="mt-6 grid gap-5 2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
             <Metric icon={CircleDollarSign} label="Suggested average rate" value={money(plan.suggested_average_rate_cents)} />
             <Metric icon={Percent} label="Current projected occupancy" value={percent(plan.current_projected_occupancy)} />
             <Metric icon={TrendingUp} label="Projected month revenue" value={money(plan.projected_revenue_cents)} />
@@ -205,15 +205,20 @@ export function TargetOccupancyPlanner({ propertyId, properties = [], compact = 
               </div>
             </div>
 
-            <div className="mt-4 overflow-hidden rounded-2xl border border-cyan-900/10 bg-white">
-              {plan.nights.slice(0, 7).map((night) => (
-                <div key={night.stay_date} className="grid grid-cols-[0.8fr_0.6fr_0.6fr_1.3fr] gap-3 border-b border-cyan-900/5 px-4 py-3 text-sm last:border-b-0">
-                  <span className="text-slate-600">{shortDate(night.stay_date)}</span>
-                  <span className="font-semibold text-slate-950">{money(night.suggested_rate_cents)}</span>
-                  <span className="text-cyan-700">{percent(night.expected_occupancy)}</span>
-                  <span className="text-slate-500">{night.strategy}</span>
-                </div>
-              ))}
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-cyan-900/10 bg-white">
+              <div className="min-w-[560px]">
+                {plan.nights.slice(0, 7).map((night) => (
+                  <div
+                    key={night.stay_date}
+                    className="grid grid-cols-[0.9fr_0.75fr_0.7fr_1.5fr] gap-3 border-b border-cyan-900/5 px-4 py-3 text-sm last:border-b-0"
+                  >
+                    <span className="text-slate-600">{shortDate(night.stay_date)}</span>
+                    <span className="font-semibold text-slate-950">{money(night.suggested_rate_cents)}</span>
+                    <span className="text-cyan-700">{percent(night.expected_occupancy)}</span>
+                    <span className="text-slate-500">{night.strategy}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -224,9 +229,9 @@ export function TargetOccupancyPlanner({ propertyId, properties = [], compact = 
 
 function Metric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
-    <div className="rounded-3xl border border-cyan-900/10 bg-slate-50 p-4">
+    <div className="min-w-0 rounded-3xl border border-cyan-900/10 bg-slate-50 p-4">
       <Icon className="size-5 text-cyan-700" />
-      <p className="mt-3 text-2xl font-semibold text-slate-950">{value}</p>
+      <p className="mt-3 break-words text-2xl font-semibold leading-tight text-slate-950 sm:text-3xl">{value}</p>
       <p className="mt-1 text-sm text-slate-600">{label}</p>
     </div>
   );

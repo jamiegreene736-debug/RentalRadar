@@ -61,7 +61,7 @@ export function RateForecastResults({ propertyId }: { propertyId?: string }) {
   if (!propertyId) return null;
 
   return (
-    <section className="mt-5 rounded-[24px] border border-cyan-900/10 bg-white p-5 shadow-[0_28px_90px_rgba(14,116,144,0.12)]">
+    <section className="rounded-[24px] border border-cyan-900/10 bg-white p-5 shadow-[0_28px_90px_rgba(14,116,144,0.12)]">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">Suggested Rates</p>
@@ -100,14 +100,14 @@ export function RateForecastResults({ propertyId }: { propertyId?: string }) {
         </div>
       ) : forecast ? (
         <>
-          <div className="mt-6 grid gap-3 md:grid-cols-4">
+          <div className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
             <Metric icon={CircleDollarSign} label="RentalRadar revenue" value={money(forecast.recommended_total_revenue_cents)} />
             <Metric icon={TrendingUp} label="Projected lift" value={money(forecast.extra_income_vs_beyond_cents)} />
             <Metric icon={Percent} label="Estimated occupancy" value={percent(forecast.estimated_occupancy)} />
             <Metric icon={CalendarRange} label="Average nightly rate" value={money(averageRate)} />
           </div>
 
-          <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+          <div className="mt-5 grid gap-5 2xl:grid-cols-[minmax(0,1.2fr)_minmax(420px,0.8fr)]">
             <div className="rounded-2xl border border-cyan-900/10 bg-slate-950 p-4">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-white">
@@ -140,21 +140,26 @@ export function RateForecastResults({ propertyId }: { propertyId?: string }) {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-2xl border border-cyan-900/10 bg-slate-50">
-              <div className="grid grid-cols-4 border-b border-cyan-900/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                <span>Date</span>
-                <span>Rate</span>
-                <span>Occ.</span>
-                <span>Market</span>
-              </div>
-              {firstNights.map((night) => (
-                <div key={night.stay_date} className="grid grid-cols-4 border-b border-cyan-900/5 px-4 py-3 text-sm last:border-b-0">
-                  <span className="text-slate-600">{shortDate(night.stay_date)}</span>
-                  <span className="font-semibold text-slate-950">{money(night.recommended_rate_cents)}</span>
-                  <span className="text-cyan-700">{percent(night.estimated_occupancy)}</span>
-                  <span className="text-slate-500">{money(night.beyond_pricing_rate_cents)}</span>
+            <div className="overflow-x-auto rounded-2xl border border-cyan-900/10 bg-slate-50">
+              <div className="min-w-[520px]">
+                <div className="grid grid-cols-[1fr_0.8fr_0.8fr_0.9fr] border-b border-cyan-900/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  <span>Date</span>
+                  <span>Rate</span>
+                  <span>Occ.</span>
+                  <span>Market</span>
                 </div>
-              ))}
+                {firstNights.map((night) => (
+                  <div
+                    key={night.stay_date}
+                    className="grid grid-cols-[1fr_0.8fr_0.8fr_0.9fr] border-b border-cyan-900/5 px-4 py-3 text-sm last:border-b-0"
+                  >
+                    <span className="text-slate-600">{shortDate(night.stay_date)}</span>
+                    <span className="font-semibold text-slate-950">{money(night.recommended_rate_cents)}</span>
+                    <span className="text-cyan-700">{percent(night.estimated_occupancy)}</span>
+                    <span className="text-slate-500">{money(night.beyond_pricing_rate_cents)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -167,9 +172,9 @@ export function RateForecastResults({ propertyId }: { propertyId?: string }) {
 
 function Metric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-cyan-900/10 bg-slate-50 p-4">
+    <div className="min-w-0 rounded-2xl border border-cyan-900/10 bg-slate-50 p-4">
       <Icon className="size-5 text-cyan-700" />
-      <p className="mt-3 text-2xl font-semibold text-slate-950">{value}</p>
+      <p className="mt-3 break-words text-2xl font-semibold leading-tight text-slate-950 sm:text-3xl">{value}</p>
       <p className="mt-1 text-sm text-slate-600">{label}</p>
     </div>
   );
