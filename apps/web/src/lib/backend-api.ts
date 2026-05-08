@@ -26,8 +26,9 @@ export async function fetchBackend(path: string, options: BackendFetchOptions = 
     headers.set("Content-Type", "application/json");
   }
 
+  const { urls, warnings } = backendBaseUrls();
   let lastError: unknown;
-  for (const baseUrl of backendBaseUrls()) {
+  for (const baseUrl of urls) {
     try {
       return await fetch(`${baseUrl}${path}`, {
         ...options,
@@ -41,12 +42,13 @@ export async function fetchBackend(path: string, options: BackendFetchOptions = 
   }
 
   const cause = lastError instanceof Error ? ` ${lastError.message}` : "";
-  throw new Error(`Backend API is unreachable. Set API_BASE_URL for the web service.${cause}`);
+  const warning = warnings.length ? ` ${warnings.join(" ")}` : "";
+  throw new Error(`Backend API is unreachable. Set API_BASE_URL to the backend service URL.${warning}${cause}`);
 }
 
 function backendBaseUrls() {
   const configured = [process.env.API_BASE_URL, process.env.NEXT_PUBLIC_API_BASE_URL]
-    .map((value) => value?.trim())
+    .map((value) => normalizeBackendBaseUrl(value))
     .filter((value): value is string => Boolean(value));
   const fallback =
     configured.length > 0
@@ -55,5 +57,46 @@ function backendBaseUrls() {
         ? PRODUCTION_PRIVATE_API_URLS
         : [DEFAULT_LOCAL_API_BASE_URL];
 
-  return [...new Set([...configured, ...fallback].map((value) => value.replace(/\/+$/, "")))];
+  const warnings: string[] = [];
+  const urls = [...new Set([...configured, ...fallback].map((value) => value.replace(/\/+$/, "")))].filter((url) => {
+    if (!pointsToThisWebService(url)) return true;
+    warnings.push("The configured API_BASE_URL points at this web service, not the FastAPI backend.");
+    return false;
+  });
+
+  return { urls: urls.length ? urls : fallback, warnings };
+}
+
+function normalizeBackendBaseUrl(value?: string) {
+  const trimmed = value?.trim().replace(/\/+$/, "");
+  if (!trimmed) return null;
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)) return trimmed;
+
+  const protocol = trimmed.includes(".railway.internal") || trimmed.includes("localhost") || trimmed.startsWith("127.")
+    ? "http"
+    : "https";
+  return `${protocol}://${trimmed}`;
+}
+
+function pointsToThisWebService(baseUrl: string) {
+  const webHosts = [
+    process.env.RAILWAY_PUBLIC_DOMAIN,
+    process.env.RAILWAY_STATIC_URL,
+    process.env.RAILWAY_PRIVATE_DOMAIN,
+    process.env.NEXT_PUBLIC_SITE_URL,
+  ]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .map((value) => normalizeHost(value));
+
+  const backendHost = normalizeHost(baseUrl);
+  return Boolean(backendHost && webHosts.includes(backendHost));
+}
+
+function normalizeHost(value: string) {
+  try {
+    return new URL(normalizeBackendBaseUrl(value) ?? value).host;
+  } catch {
+    return null;
+  }
 }
