@@ -91,10 +91,14 @@ export type ScrapeSession = {
   status: "queued" | "running" | "succeeded" | "failed" | "canceled" | "needs_review" | string;
   target_url: string;
   browser_session_id: string;
+  created_at: string;
   started_at: string | null;
   completed_at: string | null;
   current_url: string | null;
   latest_screenshot_data_url: string | null;
+  progress_percent: number;
+  progress_label: string;
+  queue_position: number | null;
   events: ScrapeSessionEvent[];
 };
 

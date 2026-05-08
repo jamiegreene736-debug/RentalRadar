@@ -137,10 +137,14 @@ class ScrapeSessionResponse(BaseModel):
     status: str
     target_url: str
     browser_session_id: str
+    created_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None
     current_url: str | None = None
     latest_screenshot_data_url: str | None = None
+    progress_percent: int
+    progress_label: str
+    queue_position: int | None = None
     events: list[ScrapeSessionEventResponse] = Field(default_factory=list)
 
 

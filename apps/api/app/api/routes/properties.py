@@ -355,9 +355,10 @@ def scrape_sessions(
         .order_by(desc(ScrapeJob.created_at))
         .limit(6)
     ).all()
+    queue_positions = _queue_positions(db, context.organization_id)
     return ScrapeSessionsResponse(
         property_id=property_id,
-        sessions=[_scrape_session_response(db, job) for job in jobs],
+        sessions=[_scrape_session_response(db, job, queue_positions.get(job.id)) for job in jobs],
     )
 
 
@@ -445,7 +446,17 @@ def _float_or_none(value: Decimal | float | None) -> float | None:
     return float(value)
 
 
-def _scrape_session_response(db: Session, job: ScrapeJob) -> ScrapeSessionResponse:
+def _queue_positions(db: Session, organization_id: UUID) -> dict[UUID, int]:
+    queued_ids = db.scalars(
+        select(ScrapeJob.id)
+        .where(ScrapeJob.organization_id == organization_id)
+        .where(ScrapeJob.status == ScrapeJobStatus.queued)
+        .order_by(ScrapeJob.priority.asc(), ScrapeJob.created_at.asc())
+    ).all()
+    return {job_id: index + 1 for index, job_id in enumerate(queued_ids)}
+
+
+def _scrape_session_response(db: Session, job: ScrapeJob, queue_position: int | None = None) -> ScrapeSessionResponse:
     browser_events = _browser_action_events(str(job.id))
     db_events = _db_scrape_events(db, job.id)
     merged_events = sorted(
@@ -461,12 +472,65 @@ def _scrape_session_response(db: Session, job: ScrapeJob) -> ScrapeSessionRespon
         status=job.status.value,
         target_url=_safe_url(job.target_url),
         browser_session_id=str(job.id),
+        created_at=job.created_at,
         started_at=job.started_at,
         completed_at=job.completed_at,
         current_url=current_url,
         latest_screenshot_data_url=latest_screenshot_data_url,
+        progress_percent=_scrape_progress_percent(job, browser_events, latest_screenshot_data_url, queue_position),
+        progress_label=_scrape_progress_label(job, browser_events, queue_position),
+        queue_position=queue_position,
         events=merged_events,
     )
+
+
+def _scrape_progress_percent(
+    job: ScrapeJob,
+    browser_events: list[ScrapeSessionEventResponse],
+    latest_screenshot_data_url: str | None,
+    queue_position: int | None,
+) -> int:
+    if job.status in {ScrapeJobStatus.succeeded, ScrapeJobStatus.failed, ScrapeJobStatus.canceled, ScrapeJobStatus.needs_review}:
+        return 100
+    if job.status == ScrapeJobStatus.running:
+        if latest_screenshot_data_url:
+            return 82
+        if browser_events:
+            return 68
+        return 48
+    if job.status == ScrapeJobStatus.queued:
+        if queue_position == 1:
+            return 28
+        if queue_position == 2:
+            return 22
+        if queue_position is not None:
+            return 16
+        return 10
+    return 5
+
+
+def _scrape_progress_label(
+    job: ScrapeJob,
+    browser_events: list[ScrapeSessionEventResponse],
+    queue_position: int | None,
+) -> str:
+    if job.status == ScrapeJobStatus.queued:
+        if queue_position is None:
+            return "Queued for browser worker"
+        return f"Queued for browser worker, position {queue_position}"
+    if job.status == ScrapeJobStatus.running:
+        if browser_events:
+            return "Chrome is open and emitting browser events"
+        return "Chrome worker picked up the job"
+    if job.status == ScrapeJobStatus.succeeded:
+        return "Scan complete"
+    if job.status == ScrapeJobStatus.failed:
+        return job.error_message or "Scan failed"
+    if job.status == ScrapeJobStatus.needs_review:
+        return "Scan needs review"
+    if job.status == ScrapeJobStatus.canceled:
+        return "Scan canceled"
+    return job.status.value.replace("_", " ")
 
 
 def _db_scrape_events(db: Session, job_id: UUID) -> list[ScrapeSessionEventResponse]:

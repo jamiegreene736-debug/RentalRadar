@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Chrome, Circle, LoaderCircle, RefreshCw, Terminal } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Chrome, Circle, Clock3, LoaderCircle, RefreshCw, Terminal } from "lucide-react";
 
 import { ScrapeSession, ScrapeSessionsResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -57,9 +57,13 @@ export function LiveScrapeScreens({ propertyId, pending = false }: { propertyId?
   if (!propertyId && !pending) return null;
 
   const activeCount = sessions.filter((session) => ["queued", "running"].includes(session.status)).length;
+  const completeCount = sessions.filter((session) => session.status === "succeeded").length;
+  const failedCount = sessions.filter((session) => ["failed", "needs_review"].includes(session.status)).length;
+  const progressPercent = aggregateProgress(sessions, pending);
+  const statusCopy = progressCopy(sessions, pending);
 
   return (
-    <section className="mt-5 rounded-[22px] border border-cyan-900/10 bg-slate-950 p-4 shadow-[0_24px_80px_rgba(8,47,73,0.22)]">
+    <section className="mt-5 w-full rounded-[22px] border border-cyan-900/10 bg-slate-950 p-4 shadow-[0_24px_80px_rgba(8,47,73,0.22)] xl:w-[min(920px,calc(100vw-36rem))]">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-2xl bg-cyan-300 text-slate-950">
@@ -89,6 +93,26 @@ export function LiveScrapeScreens({ propertyId, pending = false }: { propertyId?
         </span>
       </div>
 
+      <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-white">{statusCopy}</p>
+          <p className="text-xs font-medium text-slate-300">
+            {sessions.length ? `${completeCount}/${sessions.length} complete${failedCount ? ` · ${failedCount} needs review` : ""}` : "Preparing queue"}
+          </p>
+        </div>
+        <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-800">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-sky-300 to-emerald-300 transition-all duration-700"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+        <p className="mt-2 text-xs leading-5 text-slate-400">
+          {sessions.length
+            ? "Progress is calculated from live job status: queued position, Chrome pickup, browser events, screenshots, and completion."
+            : "RentalRadar will update this bar as soon as the property is created and scan jobs are returned by the API."}
+        </p>
+      </div>
+
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
         {sessions.length ? sessions.map((session) => <BrowserMiniScreen key={session.id} session={session} />) : <PendingScreens />}
       </div>
@@ -103,7 +127,10 @@ function PendingScreens() {
         <div key={source} className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900">
           <BrowserChrome source={source} status="queued" url="about:blank" />
           <div className="grid aspect-video place-items-center bg-[radial-gradient(circle_at_35%_25%,rgba(34,211,238,0.18),transparent_34%),linear-gradient(135deg,#0f172a,#020617)]">
-            <LoaderCircle className="size-8 animate-spin text-cyan-200" />
+            <div className="text-center">
+              <LoaderCircle className="mx-auto size-8 animate-spin text-cyan-200" />
+              <p className="mt-3 text-xs font-medium text-cyan-100">Creating scan jobs</p>
+            </div>
           </div>
         </div>
       ))}
@@ -143,6 +170,21 @@ function BrowserMiniScreen({ session }: { session: ScrapeSession }) {
         </div>
       </div>
       <div className="border-t border-white/10 bg-slate-950/92 p-3">
+        <div className="mb-3">
+          <div className="mb-1 flex items-center justify-between gap-2 text-[11px] font-medium text-slate-400">
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <Clock3 className="size-3.5 shrink-0 text-cyan-200" />
+              <span className="truncate">{session.progress_label}</span>
+            </span>
+            <span className="shrink-0 text-slate-300">{clampedProgress(session.progress_percent)}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+            <div
+              className={cn("h-full rounded-full transition-all duration-700", progressBarClass(session.status))}
+              style={{ width: `${clampedProgress(session.progress_percent)}%` }}
+            />
+          </div>
+        </div>
         <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
           <Terminal className="size-3.5" />
           Scrape Log
@@ -198,4 +240,35 @@ function statusDotClass(status: string) {
   if (status === "succeeded") return "bg-emerald-300";
   if (status === "failed") return "bg-rose-300";
   return "bg-slate-500";
+}
+
+function aggregateProgress(sessions: ScrapeSession[], pending: boolean) {
+  if (!sessions.length) return pending ? 6 : 0;
+  const total = sessions.reduce((sum, session) => sum + clampedProgress(session.progress_percent), 0);
+  return Math.round(total / sessions.length);
+}
+
+function clampedProgress(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function progressCopy(sessions: ScrapeSession[], pending: boolean) {
+  if (!sessions.length) return pending ? "Submitting property and preparing browser queue" : "Waiting for scan jobs";
+  const running = sessions.filter((session) => session.status === "running").length;
+  const succeeded = sessions.filter((session) => session.status === "succeeded").length;
+  const failed = sessions.filter((session) => ["failed", "needs_review"].includes(session.status)).length;
+  const queued = sessions.filter((session) => session.status === "queued").length;
+  if (running) return `${running} Chrome tab${running === 1 ? "" : "s"} actively scraping`;
+  if (queued && !succeeded && !failed) return `${queued} scan${queued === 1 ? "" : "s"} queued, waiting for the browser worker`;
+  if (succeeded === sessions.length) return "All browser scans complete";
+  if (failed) return `${failed} scan${failed === 1 ? "" : "s"} need review`;
+  return `${succeeded} scan${succeeded === 1 ? "" : "s"} complete, ${queued} still queued`;
+}
+
+function progressBarClass(status: string) {
+  if (status === "succeeded") return "bg-emerald-300";
+  if (status === "failed" || status === "needs_review") return "bg-rose-300";
+  if (status === "running") return "bg-cyan-300";
+  return "bg-amber-300";
 }
