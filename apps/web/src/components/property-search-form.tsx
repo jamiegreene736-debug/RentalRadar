@@ -16,7 +16,11 @@ import { cn } from "@/lib/utils";
 
 const initialState: ActionState = { ok: false, message: "" };
 
-export function PropertySearchForm() {
+type PropertySearchFormProps = {
+  showScrapePreview?: boolean;
+};
+
+export function PropertySearchForm({ showScrapePreview = true }: PropertySearchFormProps) {
   const router = useRouter();
   const [state, action] = useActionState(addPropertyAction, initialState);
   const [address, setAddress] = useState("");
@@ -183,7 +187,9 @@ export function PropertySearchForm() {
             </SubmitButton>
           </div>
         </form>
-        <LiveScrapeScreens propertyId={propertyId} pending={analysisStarted && !propertyId && !state.message} />
+        {showScrapePreview ? (
+          <LiveScrapeScreens propertyId={propertyId} pending={analysisStarted && !propertyId && !state.message} />
+        ) : null}
       </CardContent>
     </Card>
   );

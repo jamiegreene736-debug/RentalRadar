@@ -339,6 +339,7 @@ def target_occupancy_plan(
 @router.get("/properties/{property_id}/scrape-sessions", response_model=ScrapeSessionsResponse)
 def scrape_sessions(
     property_id: UUID,
+    limit: int = Query(default=24, ge=1, le=100),
     db: Session = Depends(get_db),
     context: RequestContext = Depends(get_request_context),
 ) -> ScrapeSessionsResponse:
@@ -357,7 +358,7 @@ def scrape_sessions(
         .where(ScrapeJob.property_id == property_id)
         .where(ScrapeJob.organization_id == context.organization_id)
         .order_by(desc(ScrapeJob.created_at))
-        .limit(6)
+        .limit(limit)
     ).all()
     queue_positions = _queue_positions(db, context.organization_id)
     return ScrapeSessionsResponse(

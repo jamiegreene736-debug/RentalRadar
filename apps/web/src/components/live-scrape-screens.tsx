@@ -14,7 +14,13 @@ const sourceLabels: Record<string, string> = {
   other: "Web",
 };
 
-export function LiveScrapeScreens({ propertyId, pending = false }: { propertyId?: string; pending?: boolean }) {
+type LiveScrapeScreensProps = {
+  propertyId?: string;
+  pending?: boolean;
+  className?: string;
+};
+
+export function LiveScrapeScreens({ propertyId, pending = false, className }: LiveScrapeScreensProps) {
   const [sessions, setSessions] = useState<ScrapeSession[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "live" | "error">("idle");
 
@@ -29,7 +35,7 @@ export function LiveScrapeScreens({ propertyId, pending = false }: { propertyId?
     async function loadSessions() {
       try {
         setStatus((current) => (current === "live" ? "live" : "loading"));
-        const response = await fetch(`/api/backend/properties/${propertyId}/scrape-sessions`, {
+        const response = await fetch(`/api/backend/properties/${propertyId}/scrape-sessions?limit=12`, {
           headers: {
             Accept: "application/json",
           },
@@ -64,7 +70,12 @@ export function LiveScrapeScreens({ propertyId, pending = false }: { propertyId?
   const progressTone = aggregateProgressTone(sessions, status);
 
   return (
-    <section className="mt-5 w-full rounded-[22px] border border-cyan-900/10 bg-slate-950 p-4 shadow-[0_24px_80px_rgba(8,47,73,0.22)] xl:w-[min(920px,calc(100vw-36rem))]">
+    <section
+      className={cn(
+        "mt-5 w-full rounded-[22px] border border-cyan-900/10 bg-slate-950 p-4 shadow-[0_24px_80px_rgba(8,47,73,0.22)]",
+        className,
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-2xl bg-cyan-300 text-slate-950">

@@ -1,8 +1,10 @@
 import { Building2, Chrome, PlugZap, Radar } from "lucide-react";
 
 import { GlassCard, PanelTitle } from "@/app/(dashboard)/components/glass-card";
+import { LiveScrapeScreens } from "@/components/live-scrape-screens";
 import { PropertySearchForm } from "@/components/property-search-form";
 import { RateForecastResults } from "@/components/rate-forecast-results";
+import { ScanHistory } from "@/components/scan-history";
 import { TargetOccupancyPlanner } from "@/components/target-occupancy-planner";
 import { getProperties } from "@/lib/api";
 
@@ -62,11 +64,15 @@ export default async function DashboardOverviewPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[440px_minmax(0,1fr)]">
-        <PropertySearchForm />
+        <PropertySearchForm showScrapePreview={false} />
         <TargetOccupancyPlanner properties={properties} />
       </div>
 
+      <LiveScrapeScreens propertyId={activeProperty?.id} />
+
       <RateForecastResults propertyId={activeProperty?.id} />
+
+      <ScanHistory propertyId={activeProperty?.id} limit={12} compact />
 
       <div className="grid gap-5 md:grid-cols-3">
         <EmptyMetric label="Properties" value={String(properties.length)} />
