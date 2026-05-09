@@ -186,8 +186,48 @@ def run_scrape_job(self, scrape_job_id: str) -> dict:
         return {"status": "succeeded", "scrape_job_id": scrape_job_id, **job.result_summary}
     except Exception as exc:
         db.rollback()
+        retry_delay = 30 * (self.request.retries + 1)
+        error_message = str(exc) or type(exc).__name__
+        job = db.get(ScrapeJob, UUID(scrape_job_id))
+        if job is not None:
+            if self.request.retries < self.max_retries:
+                job.status = ScrapeJobStatus.queued
+                job.started_at = None
+                job.error_code = "scrape_retrying"
+                job.error_message = f"Browser worker retrying after: {error_message}"
+                job.request_context = {
+                    **(job.request_context or {}),
+                    "last_retry_queued_at": datetime.now(timezone.utc).isoformat(),
+                    "last_retry_delay_seconds": retry_delay,
+                    "last_retry_error": error_message[:500],
+                }
+                db.add(ScrapeJobLog(
+                    scrape_job_id=job.id,
+                    level="warning",
+                    event="scrape.retrying",
+                    message=job.error_message,
+                    payload={
+                        "attempts": job.attempts,
+                        "max_retries": self.max_retries,
+                        "next_retry_seconds": retry_delay,
+                    },
+                ))
+                db.commit()
+            else:
+                job.status = ScrapeJobStatus.failed
+                job.completed_at = datetime.now(timezone.utc)
+                job.error_code = "scrape_failed"
+                job.error_message = error_message
+                db.add(ScrapeJobLog(
+                    scrape_job_id=job.id,
+                    level="error",
+                    event="scrape.failed",
+                    message=error_message,
+                    payload={"attempts": job.attempts, "max_retries": self.max_retries},
+                ))
+                db.commit()
         if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc, countdown=30 * (self.request.retries + 1))
+            raise self.retry(exc=exc, countdown=retry_delay)
         return {"status": "failed", "scrape_job_id": scrape_job_id, "error": str(exc)}
     finally:
         db.close()

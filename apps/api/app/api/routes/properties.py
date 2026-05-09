@@ -45,6 +45,8 @@ from app.workers.tasks import run_scrape_job
 
 router = APIRouter(tags=["properties"])
 
+STALE_RUNNING_SECONDS = 180
+
 
 @router.get("/address-suggestions", response_model=list[AddressSuggestionResponse])
 async def address_suggestions(
@@ -348,6 +350,8 @@ def scrape_sessions(
     if rental is None:
         raise HTTPException(status_code=404, detail="Property not found")
 
+    _recover_stale_running_jobs(db, property_id, context.organization_id)
+
     jobs = db.scalars(
         select(ScrapeJob)
         .where(ScrapeJob.property_id == property_id)
@@ -440,6 +444,64 @@ def _queue_target_month_browser_scans(
     return [*existing_job_ids, *[job.id for job in jobs]]
 
 
+def _recover_stale_running_jobs(db: Session, property_id: UUID, organization_id: UUID) -> None:
+    now = datetime.now(timezone.utc)
+    stale_jobs = db.scalars(
+        select(ScrapeJob)
+        .where(ScrapeJob.property_id == property_id)
+        .where(ScrapeJob.organization_id == organization_id)
+        .where(ScrapeJob.status == ScrapeJobStatus.running)
+        .where(ScrapeJob.started_at.is_not(None))
+        .where(ScrapeJob.started_at <= now - timedelta(seconds=STALE_RUNNING_SECONDS))
+        .order_by(ScrapeJob.started_at.asc())
+        .limit(6)
+    ).all()
+    requeue_ids: list[UUID] = []
+
+    for job in stale_jobs:
+        if _browser_action_events(str(job.id)) or _latest_screenshot_data_url(str(job.id)):
+            continue
+
+        request_context = dict(job.request_context or {})
+        stale_requeues = int(request_context.get("stale_heartbeat_requeues") or 0)
+        if stale_requeues < 1 and job.attempts < job.max_attempts:
+            request_context["stale_heartbeat_requeues"] = stale_requeues + 1
+            request_context["stale_heartbeat_requeued_at"] = now.isoformat()
+            job.status = ScrapeJobStatus.queued
+            job.started_at = None
+            job.completed_at = None
+            job.error_code = "chrome_heartbeat_missing"
+            job.error_message = "Chrome worker did not emit a browser heartbeat, so RentalRadar requeued this scan automatically."
+            job.request_context = request_context
+            db.add(ScrapeJobLog(
+                scrape_job_id=job.id,
+                level="warning",
+                event="scrape.requeued",
+                message=job.error_message,
+                payload={"stale_after_seconds": STALE_RUNNING_SECONDS, "attempts": job.attempts},
+            ))
+            requeue_ids.append(job.id)
+        else:
+            request_context["stale_heartbeat_needs_review_at"] = now.isoformat()
+            job.status = ScrapeJobStatus.needs_review
+            job.completed_at = now
+            job.error_code = "chrome_heartbeat_missing"
+            job.error_message = "Chrome worker picked up the scan but never emitted a browser heartbeat."
+            job.request_context = request_context
+            db.add(ScrapeJobLog(
+                scrape_job_id=job.id,
+                level="error",
+                event="scrape.needs_review",
+                message=job.error_message,
+                payload={"stale_after_seconds": STALE_RUNNING_SECONDS, "attempts": job.attempts},
+            ))
+
+    if stale_jobs:
+        db.commit()
+    for job_id in requeue_ids:
+        run_scrape_job.delay(str(job_id))
+
+
 def _float_or_none(value: Decimal | float | None) -> float | None:
     if value is None:
         return None
@@ -515,12 +577,16 @@ def _scrape_progress_label(
     queue_position: int | None,
 ) -> str:
     if job.status == ScrapeJobStatus.queued:
+        if job.error_code == "chrome_heartbeat_missing":
+            return "Requeued after Chrome heartbeat timeout"
         if queue_position is None:
             return "Queued for browser worker"
         return f"Queued for browser worker, position {queue_position}"
     if job.status == ScrapeJobStatus.running:
         if browser_events:
             return "Chrome is open and emitting browser events"
+        if job.started_at and _seconds_since(job.started_at) >= STALE_RUNNING_SECONDS:
+            return "No Chrome heartbeat yet; checking worker recovery"
         return "Chrome worker picked up the job"
     if job.status == ScrapeJobStatus.succeeded:
         return "Scan complete"
@@ -531,6 +597,12 @@ def _scrape_progress_label(
     if job.status == ScrapeJobStatus.canceled:
         return "Scan canceled"
     return job.status.value.replace("_", " ")
+
+
+def _seconds_since(value: datetime) -> float:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - value).total_seconds()
 
 
 def _db_scrape_events(db: Session, job_id: UUID) -> list[ScrapeSessionEventResponse]:
