@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from app.api.routes import properties
 from app.db.models import ScrapeJob, ScrapeJobStatus, ScrapeSource
+from app.schemas import ScrapeSessionEventResponse
 
 
 class _ScalarResult:
@@ -73,3 +74,43 @@ def test_stale_running_scrape_with_existing_requeue_needs_review(monkeypatch) ->
     assert job.error_code == "chrome_heartbeat_missing"
     db.commit.assert_called_once()
     delay.assert_not_called()
+
+
+def test_needs_review_without_browser_evidence_is_not_complete() -> None:
+    job = ScrapeJob(
+        id=uuid4(),
+        organization_id=uuid4(),
+        property_id=uuid4(),
+        source=ScrapeSource.airbnb,
+        target_url="https://www.airbnb.com/s/test/homes",
+        status=ScrapeJobStatus.needs_review,
+        started_at=datetime.now(timezone.utc) - timedelta(minutes=10),
+        error_message="Chrome worker picked up the scan but never emitted a browser heartbeat.",
+    )
+
+    assert properties._scrape_progress_percent(job, [], None, None) == 34
+    assert properties._scrape_progress_label(job, [], None) == job.error_message
+
+
+def test_needs_review_with_browser_events_keeps_evidence_progress() -> None:
+    job = ScrapeJob(
+        id=uuid4(),
+        organization_id=uuid4(),
+        property_id=uuid4(),
+        source=ScrapeSource.airbnb,
+        target_url="https://www.airbnb.com/s/test/homes",
+        status=ScrapeJobStatus.needs_review,
+        started_at=datetime.now(timezone.utc) - timedelta(minutes=10),
+        error_message="Extraction confidence was too low.",
+    )
+    events = [
+        ScrapeSessionEventResponse(
+            at=datetime.now(timezone.utc),
+            event="browser.launched",
+            level="info",
+            message="Chrome session opened",
+        )
+    ]
+
+    assert properties._scrape_progress_percent(job, events, None, None) == 68
+    assert properties._scrape_progress_percent(job, events, "data:image/jpeg;base64,abc", None) == 82

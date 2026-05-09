@@ -61,6 +61,7 @@ export function LiveScrapeScreens({ propertyId, pending = false }: { propertyId?
   const failedCount = sessions.filter((session) => ["failed", "needs_review"].includes(session.status)).length;
   const progressPercent = aggregateProgress(sessions, pending);
   const statusCopy = progressCopy(sessions, pending);
+  const progressTone = aggregateProgressTone(sessions, status);
 
   return (
     <section className="mt-5 w-full rounded-[22px] border border-cyan-900/10 bg-slate-950 p-4 shadow-[0_24px_80px_rgba(8,47,73,0.22)] xl:w-[min(920px,calc(100vw-36rem))]">
@@ -102,13 +103,13 @@ export function LiveScrapeScreens({ propertyId, pending = false }: { propertyId?
         </div>
         <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-800">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-sky-300 to-emerald-300 transition-all duration-700"
+            className={cn("h-full rounded-full transition-all duration-700", progressTone)}
             style={{ width: `${progressPercent}%` }}
           />
         </div>
         <p className="mt-2 text-xs leading-5 text-slate-400">
           {sessions.length
-            ? "Progress is calculated from live job status: queued position, Chrome pickup, browser events, screenshots, and completion."
+            ? "Progress is based on evidence captured: queue pickup, browser events, screenshots, and successful extraction. Review states do not count as completed scans."
             : "RentalRadar will update this bar as soon as the property is created and scan jobs are returned by the API."}
         </p>
       </div>
@@ -152,8 +153,8 @@ function BrowserMiniScreen({ session }: { session: ScrapeSession }) {
           <img src={session.latest_screenshot_data_url} alt={`${source} scrape screen`} className="size-full object-cover" />
         ) : (
           <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.18),transparent_32%),linear-gradient(135deg,#0f172a,#020617)]">
-            <div className="text-center">
-              {session.status === "failed" ? (
+            <div className="max-w-[82%] text-center">
+              {session.status === "failed" || session.status === "needs_review" ? (
                 <AlertTriangle className="mx-auto size-8 text-rose-200" />
               ) : session.status === "succeeded" ? (
                 <CheckCircle2 className="mx-auto size-8 text-emerald-200" />
@@ -161,6 +162,11 @@ function BrowserMiniScreen({ session }: { session: ScrapeSession }) {
                 <RefreshCw className="mx-auto size-8 animate-spin text-cyan-200" />
               )}
               <p className="mt-3 text-sm font-medium text-white">{statusLabel(session.status)}</p>
+              <p className="mt-1 text-xs leading-5 text-slate-400">
+                {session.status === "failed" || session.status === "needs_review"
+                  ? "No Chrome screenshot was captured for this scan."
+                  : "Waiting for the browser to send its first screen."}
+              </p>
             </div>
           </div>
         )}
@@ -231,6 +237,7 @@ function statusLabel(status: string) {
   if (status === "running") return "Actively scraping";
   if (status === "succeeded") return "Rates captured";
   if (status === "failed") return "Needs review";
+  if (status === "needs_review") return "No screen captured";
   return status.replaceAll("_", " ");
 }
 
@@ -246,6 +253,15 @@ function aggregateProgress(sessions: ScrapeSession[], pending: boolean) {
   if (!sessions.length) return pending ? 6 : 0;
   const total = sessions.reduce((sum, session) => sum + clampedProgress(session.progress_percent), 0);
   return Math.round(total / sessions.length);
+}
+
+function aggregateProgressTone(sessions: ScrapeSession[], status: "idle" | "loading" | "live" | "error") {
+  if (status === "error") return "bg-rose-300";
+  const failed = sessions.some((session) => ["failed", "needs_review"].includes(session.status));
+  const succeeded = sessions.length > 0 && sessions.every((session) => session.status === "succeeded");
+  if (failed) return "bg-rose-300";
+  if (succeeded) return "bg-emerald-300";
+  return "bg-gradient-to-r from-cyan-300 via-sky-300 to-emerald-300";
 }
 
 function clampedProgress(value: number) {

@@ -552,8 +552,16 @@ def _scrape_progress_percent(
     latest_screenshot_data_url: str | None,
     queue_position: int | None,
 ) -> int:
-    if job.status in {ScrapeJobStatus.succeeded, ScrapeJobStatus.failed, ScrapeJobStatus.canceled, ScrapeJobStatus.needs_review}:
+    if job.status == ScrapeJobStatus.succeeded:
         return 100
+    if job.status in {ScrapeJobStatus.failed, ScrapeJobStatus.needs_review}:
+        if latest_screenshot_data_url:
+            return 82
+        if browser_events:
+            return 68
+        return 34
+    if job.status == ScrapeJobStatus.canceled:
+        return 0
     if job.status == ScrapeJobStatus.running:
         if latest_screenshot_data_url:
             return 82
@@ -593,7 +601,7 @@ def _scrape_progress_label(
     if job.status == ScrapeJobStatus.failed:
         return job.error_message or "Scan failed"
     if job.status == ScrapeJobStatus.needs_review:
-        return "Scan needs review"
+        return job.error_message or "Scan needs review"
     if job.status == ScrapeJobStatus.canceled:
         return "Scan canceled"
     return job.status.value.replace("_", " ")

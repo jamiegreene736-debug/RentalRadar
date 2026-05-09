@@ -76,6 +76,13 @@ def run_scrape_job(self, scrape_job_id: str) -> dict:
             stay_date_end=job.stay_date_end or date.today() + timedelta(days=90),
             browser_session_id=str(job.id),
         )
+        db.add(ScrapeJobLog(
+            scrape_job_id=job.id,
+            level="info",
+            event="browser.launching",
+            message="Starting headed Chrome browser session.",
+        ))
+        db.commit()
         run = asyncio.run(MarketScrapeOrchestrator().run(target))
 
         strategy = ScraperStrategy(
