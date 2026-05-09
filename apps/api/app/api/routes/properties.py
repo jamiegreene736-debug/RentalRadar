@@ -733,6 +733,7 @@ def _has_browser_evidence(
     evidence_events = {
         "browser.launched",
         "scrape.page_loaded",
+        "scrape.live_screenshot",
         "scrape.screenshot",
         "scrape.completed",
         "screenshot.failed",
@@ -814,7 +815,7 @@ def _event_message(event: str, payload: dict[str, Any]) -> str | None:
         return f"{payload.get('method', 'GET')} {_safe_url(str(payload.get('url', '')))}"
     if event == "response":
         return f"HTTP {payload.get('status')} {_safe_url(str(payload.get('url', '')))}"
-    if event in {"scrape.page_loaded", "scrape.screenshot"}:
+    if event in {"scrape.page_loaded", "scrape.live_screenshot", "scrape.screenshot"}:
         return "Screen preview updated"
     if event == "scrape.completed":
         return "Extraction run finished"
@@ -839,7 +840,7 @@ def _latest_screenshot_data_url(job: ScrapeJob) -> str | None:
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if record.get("event") not in {"scrape.page_loaded", "scrape.screenshot"}:
+        if record.get("event") not in {"scrape.page_loaded", "scrape.live_screenshot", "scrape.screenshot"}:
             continue
         payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
         screenshot_path = payload.get("screenshot_path")

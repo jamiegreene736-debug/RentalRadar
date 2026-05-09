@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from datetime import datetime, timezone
@@ -18,6 +19,7 @@ DB_EVENT_ALLOWLIST = {
     "browser.launched",
     "browser.shutdown",
     "scrape.page_loaded",
+    "scrape.live_screenshot",
     "scrape.screenshot",
     "scrape.completed",
     "screenshot.failed",
@@ -57,6 +59,28 @@ class BrowserActionLogger:
         except Exception as exc:
             self.write("screenshot.failed", {"message": str(exc)})
             return None
+
+    def start_screenshot_heartbeat(
+        self,
+        page: Page,
+        *,
+        interval_seconds: float = 3,
+        event: str = "scrape.live_screenshot",
+    ) -> asyncio.Task[None]:
+        return asyncio.create_task(self._screenshot_heartbeat(page, interval_seconds, event))
+
+    async def _screenshot_heartbeat(self, page: Page, interval_seconds: float, event: str) -> None:
+        while True:
+            await asyncio.sleep(interval_seconds)
+            try:
+                if page.is_closed():
+                    return
+                await self.screenshot(page, event)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.write("screenshot.failed", {"message": str(exc)})
+                return
 
     async def attach(self, page: Page) -> None:
         page.on("request", lambda request: self.write("request", {"method": request.method, "url": _safe_url(request.url)}))
@@ -144,7 +168,7 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
 def _event_message(event: str, payload: dict[str, Any]) -> str | None:
     if event == "browser.launched":
         return "Chrome session opened."
-    if event in {"scrape.page_loaded", "scrape.screenshot"}:
+    if event in {"scrape.page_loaded", "scrape.live_screenshot", "scrape.screenshot"}:
         return "Chrome screen preview captured."
     if event == "scrape.completed":
         return "Extraction run finished."

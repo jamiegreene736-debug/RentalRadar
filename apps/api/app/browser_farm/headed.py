@@ -62,6 +62,7 @@ async def launch_headed_browser(
     playwright = await async_playwright().start()
     browser: Browser | None = None
     context: BrowserContext | None = None
+    screenshot_heartbeat: asyncio.Task[None] | None = None
     user_data_dir = tempfile.mkdtemp(prefix=f"rr-browser-{job_id}-")
     action_logger = BrowserActionLogger(job_id)
     profile = random_fingerprint()
@@ -126,6 +127,8 @@ async def launch_headed_browser(
         await action_logger.attach(page)
         setattr(page, "_rentalradar_action_logger", action_logger)
         action_logger.write("browser.launched", {"proxy": proxy.redacted() if proxy else None, "profile": profile})
+        await action_logger.screenshot(page, "scrape.live_screenshot")
+        screenshot_heartbeat = action_logger.start_screenshot_heartbeat(page)
         await humanize_page(page)
         yield HeadedBrowserSession(
             playwright=playwright,
@@ -137,6 +140,12 @@ async def launch_headed_browser(
             proxy=proxy,
         )
     finally:
+        if screenshot_heartbeat:
+            screenshot_heartbeat.cancel()
+            try:
+                await screenshot_heartbeat
+            except asyncio.CancelledError:
+                pass
         action_logger.write("browser.shutdown")
         try:
             if context:
