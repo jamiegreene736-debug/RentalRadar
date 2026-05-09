@@ -459,7 +459,9 @@ def _recover_stale_running_jobs(db: Session, property_id: UUID, organization_id:
     requeue_ids: list[UUID] = []
 
     for job in stale_jobs:
-        if _browser_action_events(str(job.id)) or _latest_screenshot_data_url(str(job.id)):
+        browser_events = _browser_action_events(str(job.id))
+        db_events = _db_scrape_events(db, job.id)
+        if _has_browser_evidence(db_events, browser_events) or _latest_screenshot_data_url(job):
             continue
 
         request_context = dict(job.request_context or {})
@@ -526,8 +528,8 @@ def _scrape_session_response(db: Session, job: ScrapeJob, queue_position: int | 
         key=lambda item: item.at,
         reverse=True,
     )[:18]
-    current_url = next((event.url for event in browser_events if event.url), None)
-    latest_screenshot_data_url = _latest_screenshot_data_url(str(job.id))
+    current_url = next((event.url for event in merged_events if event.url), None)
+    latest_screenshot_data_url = _latest_screenshot_data_url(job)
     return ScrapeSessionResponse(
         id=job.id,
         source=job.source,
@@ -539,8 +541,8 @@ def _scrape_session_response(db: Session, job: ScrapeJob, queue_position: int | 
         completed_at=job.completed_at,
         current_url=current_url,
         latest_screenshot_data_url=latest_screenshot_data_url,
-        progress_percent=_scrape_progress_percent(job, browser_events, latest_screenshot_data_url, queue_position),
-        progress_label=_scrape_progress_label(job, browser_events, queue_position),
+        progress_percent=_scrape_progress_percent(job, merged_events, latest_screenshot_data_url, queue_position),
+        progress_label=_scrape_progress_label(job, merged_events, queue_position),
         queue_position=queue_position,
         events=merged_events,
     )
@@ -613,6 +615,21 @@ def _seconds_since(value: datetime) -> float:
     return (datetime.now(timezone.utc) - value).total_seconds()
 
 
+def _has_browser_evidence(
+    db_events: list[ScrapeSessionEventResponse],
+    browser_events: list[ScrapeSessionEventResponse],
+) -> bool:
+    evidence_events = {
+        "browser.launched",
+        "scrape.page_loaded",
+        "scrape.screenshot",
+        "scrape.completed",
+        "screenshot.failed",
+        "pageerror",
+    }
+    return any(event.event in evidence_events for event in [*db_events, *browser_events])
+
+
 def _db_scrape_events(db: Session, job_id: UUID) -> list[ScrapeSessionEventResponse]:
     logs = db.scalars(
         select(ScrapeJobLog)
@@ -626,6 +643,8 @@ def _db_scrape_events(db: Session, job_id: UUID) -> list[ScrapeSessionEventRespo
             event=log.event,
             level=log.level,
             message=log.message,
+            url=_safe_url(str(log.payload.get("url"))) if isinstance(log.payload, dict) and log.payload.get("url") else None,
+            status=log.payload.get("status") if isinstance(log.payload, dict) and isinstance(log.payload.get("status"), int) else None,
         )
         for log in logs
     ]
@@ -695,7 +714,13 @@ def _event_message(event: str, payload: dict[str, Any]) -> str | None:
     return None
 
 
-def _latest_screenshot_data_url(job_id: str) -> str | None:
+def _latest_screenshot_data_url(job: ScrapeJob) -> str | None:
+    summary = job.result_summary if isinstance(job.result_summary, dict) else {}
+    data_url = summary.get("latest_screenshot_data_url")
+    if isinstance(data_url, str) and data_url.startswith("data:image/"):
+        return data_url
+
+    job_id = str(job.id)
     root = Path(get_settings().browser_action_log_dir)
     log_path = root / f"{job_id}.jsonl"
     for line in reversed(_tail_lines(log_path, 120)):
