@@ -5,6 +5,7 @@ import { LiveScrapeScreens } from "@/components/live-scrape-screens";
 import { PropertySearchForm } from "@/components/property-search-form";
 import { RateForecastResults } from "@/components/rate-forecast-results";
 import { ScanHistory } from "@/components/scan-history";
+import { StoredPropertiesSection } from "@/components/stored-properties-section";
 import { TargetOccupancyPlanner } from "@/components/target-occupancy-planner";
 import { getProperties } from "@/lib/api";
 
@@ -64,9 +65,20 @@ export default async function DashboardOverviewPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[440px_minmax(0,1fr)]">
-        <PropertySearchForm showScrapePreview={false} />
+        <PropertySearchForm
+          showScrapePreview={false}
+          initialAddress={activeProperty?.formatted_address ?? activeProperty?.address_line1 ?? ""}
+          title={hasProperties ? "Search or update an address" : "Add your first property"}
+          description={
+            hasProperties
+              ? "This account already has a saved property. Use Stored Properties below to rerun scans from that record."
+              : "Enter the address you want RentalRadar to analyze first."
+          }
+        />
         <TargetOccupancyPlanner properties={properties} />
       </div>
+
+      <StoredPropertiesSection properties={properties} />
 
       <LiveScrapeScreens propertyId={activeProperty?.id} />
 

@@ -4,6 +4,7 @@ import {
   BillingSessionResponse,
   AccountProfileResponse,
   ErrorDashboardResponse,
+  MarketScanResponse,
   MarketRatesResponse,
   OtaDirectStatusResponse,
   PropertyResponse,
@@ -115,6 +116,12 @@ export async function runPricing(propertyId: string) {
   return apiFetch("/pricing/recommendations/run", {
     method: "POST",
     json: { property_id: propertyId },
+  });
+}
+
+export async function queuePropertyMarketScan(propertyId: string): Promise<MarketScanResponse> {
+  return apiFetch<MarketScanResponse>(`/properties/${propertyId}/market-scan`, {
+    method: "POST",
   });
 }
 

@@ -18,12 +18,20 @@ const initialState: ActionState = { ok: false, message: "" };
 
 type PropertySearchFormProps = {
   showScrapePreview?: boolean;
+  initialAddress?: string;
+  title?: string;
+  description?: string;
 };
 
-export function PropertySearchForm({ showScrapePreview = true }: PropertySearchFormProps) {
+export function PropertySearchForm({
+  showScrapePreview = true,
+  initialAddress = "",
+  title = "Add your first property",
+  description = "Enter the address you want RentalRadar to analyze first.",
+}: PropertySearchFormProps) {
   const router = useRouter();
   const [state, action] = useActionState(addPropertyAction, initialState);
-  const [address, setAddress] = useState("");
+  const [address, setAddress] = useState(initialAddress);
   const [analysisStarted, setAnalysisStarted] = useState(false);
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [suggestionStatus, setSuggestionStatus] = useState<"idle" | "loading" | "ready" | "empty" | "error">("idle");
@@ -67,6 +75,10 @@ export function PropertySearchForm({ showScrapePreview = true }: PropertySearchF
   const propertyId = state.propertyId;
 
   useEffect(() => {
+    setAddress(initialAddress);
+  }, [initialAddress]);
+
+  useEffect(() => {
     if (state.ok && state.propertyId) {
       router.refresh();
     }
@@ -77,9 +89,9 @@ export function PropertySearchForm({ showScrapePreview = true }: PropertySearchF
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
           <MapPin className="size-5 text-primary" />
-          <CardTitle>Add your first property</CardTitle>
+          <CardTitle>{title}</CardTitle>
         </div>
-        <CardDescription>Enter the address you want RentalRadar to analyze first.</CardDescription>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>
         <form action={action} className="grid gap-4" onSubmit={() => setAnalysisStarted(true)}>

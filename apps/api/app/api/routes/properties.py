@@ -32,6 +32,7 @@ from app.schemas import (
     ScrapeSessionResponse,
     ScrapeSessionsResponse,
     BrowserEvidenceResponse,
+    MarketScanResponse,
     TargetOccupancyNightResponse,
     TargetOccupancyPlanRequest,
     TargetOccupancyPlanResponse,
@@ -143,6 +144,40 @@ def list_properties(
         )
         for rental in rentals
     ]
+
+
+@router.post("/properties/{property_id}/market-scan", response_model=MarketScanResponse)
+def queue_market_scan(
+    property_id: UUID,
+    scan_days: int = Query(default=90, ge=1, le=365),
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> MarketScanResponse:
+    rental = db.scalar(
+        select(Property)
+        .where(Property.id == property_id)
+        .where(Property.organization_id == context.organization_id)
+        .where(Property.active.is_(True))
+    )
+    if rental is None:
+        raise HTTPException(status_code=404, detail="Property not found")
+
+    queued_job_ids = _queue_property_market_scans(
+        db=db,
+        rental=rental,
+        scan_days=scan_days,
+        context=context,
+        trigger="manual_property_rerun",
+    )
+    return MarketScanResponse(
+        property_id=rental.id,
+        queued_job_ids=queued_job_ids,
+        message=(
+            "An active scan is already running for this property."
+            if not queued_job_ids
+            else f"Queued {len(queued_job_ids)} headed-browser market scan{'' if len(queued_job_ids) == 1 else 's'}."
+        ),
+    )
 
 
 @router.get("/properties/{property_id}/market-rates", response_model=MarketRatesResponse)
@@ -443,6 +478,83 @@ def _queue_target_month_browser_scans(
         db.refresh(job)
         run_scrape_job.delay(str(job.id))
     return [*existing_job_ids, *[job.id for job in jobs]]
+
+
+def _queue_property_market_scans(
+    *,
+    db: Session,
+    rental: Property,
+    scan_days: int,
+    context: RequestContext,
+    trigger: str,
+) -> list[UUID]:
+    scan_start = date.today()
+    scan_end = scan_start + timedelta(days=scan_days)
+    competitors = list(
+        db.scalars(
+            select(Competitor)
+            .where(Competitor.property_id == rental.id)
+            .where(Competitor.active.is_(True))
+            .order_by(desc(Competitor.updated_at))
+            .limit(8)
+        ).all()
+    )
+    targets = [(competitor.external_url, competitor.source, competitor.id) for competitor in competitors]
+    if not targets:
+        address = rental.formatted_address or rental.address_line1
+        targets = [(url, infer_source(url), None) for url in default_market_targets(address)]
+
+    jobs: list[ScrapeJob] = []
+    active_job_ids: list[UUID] = []
+    for target_url, source, competitor_id in targets:
+        existing_job = db.scalar(
+            select(ScrapeJob)
+            .where(ScrapeJob.property_id == rental.id)
+            .where(ScrapeJob.target_url == target_url)
+            .where(ScrapeJob.status.in_([ScrapeJobStatus.queued, ScrapeJobStatus.running]))
+            .order_by(desc(ScrapeJob.created_at))
+        )
+        if existing_job is not None:
+            active_job_ids.append(existing_job.id)
+            continue
+
+        job = ScrapeJob(
+            organization_id=context.organization_id,
+            property_id=rental.id,
+            competitor_id=competitor_id,
+            source=source,
+            target_url=target_url,
+            stay_date_start=scan_start,
+            stay_date_end=scan_end,
+            status=ScrapeJobStatus.queued,
+            priority=20,
+            request_context={
+                "trigger": trigger,
+                "scan_days": scan_days,
+            },
+        )
+        db.add(job)
+        db.flush()
+        try:
+            require_usage_allowance(
+                db,
+                context.organization_id,
+                "scrape_job",
+                property_id=rental.id,
+                source=trigger,
+                idempotency_key=f"scrape_job:{job.id}",
+            )
+        except BillingRequired as exc:
+            raise HTTPException(status_code=402, detail=str(exc)) from exc
+        except UsageLimitExceeded as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
+        jobs.append(job)
+
+    db.commit()
+    for job in jobs:
+        db.refresh(job)
+        run_scrape_job.delay(str(job.id))
+    return [*active_job_ids, *[job.id for job in jobs]]
 
 
 def _recover_stale_running_jobs(db: Session, property_id: UUID, organization_id: UUID) -> None:

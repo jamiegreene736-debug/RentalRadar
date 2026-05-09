@@ -10,6 +10,7 @@ import {
   createBillingCheckout,
   createProperty,
   getProperties,
+  queuePropertyMarketScan,
   pushDirectPricing,
   pushPricing,
   revokeDirectOta,
@@ -173,6 +174,23 @@ export async function refreshPricingAction(formData: FormData) {
   const propertyId = String(formData.get("propertyId"));
   await runPricing(propertyId);
   revalidatePath("/");
+}
+
+export async function rerunPropertyScanAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const propertyId = String(formData.get("propertyId"));
+    const response = await queuePropertyMarketScan(propertyId);
+    revalidatePropertyRoutes();
+    revalidatePath("/dashboard/ai-log");
+    revalidatePath(`/dashboard/properties/${propertyId}`);
+    return {
+      ok: true,
+      message: response.message || "Market scan queued.",
+      propertyId,
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Unable to queue scan." };
+  }
 }
 
 export async function subscribeAction(_: ActionState, formData: FormData): Promise<ActionState> {

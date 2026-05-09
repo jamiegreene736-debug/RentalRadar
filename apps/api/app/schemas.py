@@ -79,6 +79,12 @@ class PropertyResponse(BaseModel):
     market_scan_job_ids: list[UUID]
 
 
+class MarketScanResponse(BaseModel):
+    property_id: UUID
+    queued_job_ids: list[UUID]
+    message: str
+
+
 class AddressSuggestionResponse(BaseModel):
     place_id: str
     formatted_address: str

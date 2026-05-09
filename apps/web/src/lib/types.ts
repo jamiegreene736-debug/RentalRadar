@@ -12,6 +12,12 @@ export type PropertyResponse = {
   market_scan_job_ids: string[];
 };
 
+export type MarketScanResponse = {
+  property_id: string;
+  queued_job_ids: string[];
+  message: string;
+};
+
 export type AddressSuggestion = {
   place_id: string;
   formatted_address: string;
