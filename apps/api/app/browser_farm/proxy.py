@@ -5,6 +5,7 @@ import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from redis import Redis
 
@@ -53,10 +54,17 @@ class ProxyRotator:
         redis_proxy = self._lease_from_redis(job_id)
         if redis_proxy:
             return redis_proxy
+        brightdata_proxy = self._lease_from_brightdata(job_id)
+        if brightdata_proxy:
+            return brightdata_proxy
         if not self.settings.scraper_proxy_urls:
+            if self.settings.scraper_require_residential_proxy:
+                raise RuntimeError(
+                    "Residential proxy required but not configured. Set Bright Data proxy variables or SCRAPER_PROXY_URLS."
+                )
             return None
         server = random.choice(self.settings.scraper_proxy_urls)
-        return ProxyLease(server=server, provider="env")
+        return _lease_from_proxy_url(server, provider="env")
 
     def mark_success(self, lease: ProxyLease | None) -> None:
         if not lease:
@@ -98,3 +106,38 @@ class ProxyRotator:
                 sticky_session_id=data.get("sticky_session_id") or job_id,
             )
         return None
+
+    def _lease_from_brightdata(self, job_id: str | None) -> ProxyLease | None:
+        if not self.settings.brightdata_proxy_server:
+            return None
+        username = self.settings.brightdata_proxy_username
+        if username and "{session}" in username:
+            username = username.replace("{session}", _session_token(job_id))
+        return ProxyLease(
+            server=self.settings.brightdata_proxy_server,
+            username=username,
+            password=self.settings.brightdata_proxy_password,
+            provider="brightdata",
+            sticky_session_id=_session_token(job_id),
+        )
+
+
+def _lease_from_proxy_url(value: str, provider: str) -> ProxyLease:
+    parsed = urlsplit(value)
+    if not parsed.username and not parsed.password:
+        return ProxyLease(server=value, provider=provider)
+    host = parsed.hostname or ""
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+    server = urlunsplit((parsed.scheme, host, parsed.path, parsed.query, parsed.fragment))
+    return ProxyLease(
+        server=server,
+        username=unquote(parsed.username) if parsed.username else None,
+        password=unquote(parsed.password) if parsed.password else None,
+        provider=provider,
+    )
+
+
+def _session_token(job_id: str | None) -> str:
+    token = (job_id or "rentalradar").replace("-", "")[:18]
+    return f"rr{token}"

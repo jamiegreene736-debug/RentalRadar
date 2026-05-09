@@ -40,7 +40,13 @@ from app.schemas import (
 from app.services.cache import JsonCache
 from app.services.forecast import build_rate_forecast, build_target_occupancy_plan
 from app.services.geocoding import suggest_addresses
-from app.services.market import create_property_and_jobs, default_market_targets, get_market_rates, infer_source
+from app.services.market import (
+    create_property_and_jobs,
+    default_market_targets,
+    default_seasonal_market_targets,
+    get_market_rates,
+    infer_source,
+)
 from app.services.usage import BillingRequired, UsageLimitExceeded, ensure_property_allowed, require_usage_allowance
 from app.workers.tasks import run_scrape_job
 
@@ -65,11 +71,12 @@ def create_property(
 ) -> PropertyResponse:
     try:
         ensure_property_allowed(db, context.organization_id)
+        preflight_job_count = len(payload.comp_urls) or len(default_seasonal_market_targets(payload.address))
         require_usage_allowance(
             db,
             context.organization_id,
             "scrape_job",
-            units=(len(payload.comp_urls) or 3) * 25,
+            units=preflight_job_count * 25,
             source="property_create.preflight",
             record=False,
         )
@@ -488,25 +495,14 @@ def _queue_property_market_scans(
     context: RequestContext,
     trigger: str,
 ) -> list[UUID]:
-    scan_start = date.today()
-    scan_end = scan_start + timedelta(days=scan_days)
-    competitors = list(
-        db.scalars(
-            select(Competitor)
-            .where(Competitor.property_id == rental.id)
-            .where(Competitor.active.is_(True))
-            .order_by(desc(Competitor.updated_at))
-            .limit(8)
-        ).all()
-    )
-    targets = [(competitor.external_url, competitor.source, competitor.id) for competitor in competitors]
-    if not targets:
-        address = rental.formatted_address or rental.address_line1
-        targets = [(url, infer_source(url), None) for url in default_market_targets(address)]
+    address = rental.formatted_address or rental.address_line1
+    targets = default_seasonal_market_targets(address, months_ahead=24, stay_nights=7)
 
     jobs: list[ScrapeJob] = []
     active_job_ids: list[UUID] = []
-    for target_url, source, competitor_id in targets:
+    for target in targets:
+        target_url = target.url
+        source = infer_source(target_url)
         existing_job = db.scalar(
             select(ScrapeJob)
             .where(ScrapeJob.property_id == rental.id)
@@ -521,16 +517,18 @@ def _queue_property_market_scans(
         job = ScrapeJob(
             organization_id=context.organization_id,
             property_id=rental.id,
-            competitor_id=competitor_id,
+            competitor_id=None,
             source=source,
             target_url=target_url,
-            stay_date_start=scan_start,
-            stay_date_end=scan_end,
+            stay_date_start=target.stay_date_start,
+            stay_date_end=target.stay_date_end,
             status=ScrapeJobStatus.queued,
             priority=20,
             request_context={
                 "trigger": trigger,
                 "scan_days": scan_days,
+                "season": target.season_label,
+                "stay_nights": 7,
             },
         )
         db.add(job)

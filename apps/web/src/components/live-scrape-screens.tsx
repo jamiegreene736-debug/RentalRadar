@@ -62,12 +62,12 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
 
   if (!propertyId && !pending) return null;
 
-  const activeCount = sessions.filter((session) => ["queued", "running"].includes(session.status)).length;
-  const completeCount = sessions.filter((session) => session.status === "succeeded").length;
-  const failedCount = sessions.filter((session) => ["failed", "needs_review"].includes(session.status)).length;
-  const progressPercent = aggregateProgress(sessions, pending);
-  const statusCopy = progressCopy(sessions, pending);
-  const progressTone = aggregateProgressTone(sessions, status);
+  const liveSessions = sessions.filter((session) => ["queued", "running"].includes(session.status));
+  const hasLiveSessions = liveSessions.length > 0;
+  const latestSavedSession = sessions[0];
+  const progressPercent = hasLiveSessions || pending ? aggregateProgress(liveSessions, pending) : 0;
+  const statusCopy = progressCopy(liveSessions, pending, sessions.length);
+  const progressTone = hasLiveSessions || pending ? aggregateProgressTone(liveSessions, status) : "bg-slate-700";
 
   return (
     <section
@@ -85,9 +85,9 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
             <p className="font-semibold text-white">Live Google Chrome scrape</p>
             <p className="text-sm text-slate-400">
               {propertyId
-                ? activeCount
-                  ? `${activeCount} tab${activeCount === 1 ? "" : "s"} active`
-                  : "Watching the latest rate search"
+                ? hasLiveSessions
+                  ? `${liveSessions.length} tab${liveSessions.length === 1 ? "" : "s"} active`
+                  : "No active browser scan right now"
                 : "Preparing Airbnb, VRBO, and Booking.com tabs"}
             </p>
           </div>
@@ -101,7 +101,7 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
           )}
         >
           {status === "loading" || pending ? <LoaderCircle className="size-3.5 animate-spin" /> : <Circle className="size-2 fill-current" />}
-          {status === "error" ? "Preview unavailable" : status === "loading" || pending ? "Opening tabs" : "Live"}
+          {status === "error" ? "Preview unavailable" : status === "loading" || pending ? "Opening tabs" : hasLiveSessions ? "Live" : "Idle"}
         </span>
       </div>
 
@@ -109,7 +109,11 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-semibold text-white">{statusCopy}</p>
           <p className="text-xs font-medium text-slate-300">
-            {sessions.length ? `${completeCount}/${sessions.length} complete${failedCount ? ` · ${failedCount} needs review` : ""}` : "Preparing queue"}
+            {hasLiveSessions
+              ? `${liveSessions.length} active`
+              : latestSavedSession
+                ? `Last saved run: ${statusLabel(latestSavedSession.status)}`
+                : "No scans queued"}
           </p>
         </div>
         <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-800">
@@ -119,16 +123,43 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
           />
         </div>
         <p className="mt-2 text-xs leading-5 text-slate-400">
-          {sessions.length
+          {hasLiveSessions
             ? "Progress is based on evidence captured: queue pickup, browser events, screenshots, and successful extraction. Review states do not count as completed scans."
+            : sessions.length
+              ? "Past scan results are saved in Scan History. This panel only shows scans that are actively queued or running."
             : "RentalRadar will update this bar as soon as the property is created and scan jobs are returned by the API."}
         </p>
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
-        {sessions.length ? sessions.map((session) => <BrowserMiniScreen key={session.id} session={session} />) : <PendingScreens />}
+        {hasLiveSessions ? (
+          liveSessions.map((session) => <BrowserMiniScreen key={session.id} session={session} />)
+        ) : pending ? (
+          <PendingScreens />
+        ) : (
+          <NoActiveScreens />
+        )}
       </div>
     </section>
+  );
+}
+
+function NoActiveScreens() {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-900 p-5 lg:col-span-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-semibold text-white">No active Chrome windows</p>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            Use Run new scan on the saved property above. Once the browser worker picks it up, Airbnb, VRBO, and Booking.com
+            windows will appear here.
+          </p>
+        </div>
+        <span className="w-fit rounded-full border border-cyan-200/20 bg-cyan-300/10 px-3 py-1 text-xs font-medium text-cyan-100">
+          History preserved
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -280,8 +311,12 @@ function clampedProgress(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function progressCopy(sessions: ScrapeSession[], pending: boolean) {
-  if (!sessions.length) return pending ? "Submitting property and preparing browser queue" : "Waiting for scan jobs";
+function progressCopy(sessions: ScrapeSession[], pending: boolean, savedSessionCount: number) {
+  if (!sessions.length) {
+    if (pending) return "Submitting property and preparing browser queue";
+    if (savedSessionCount) return "No active scan running";
+    return "Waiting for scan jobs";
+  }
   const running = sessions.filter((session) => session.status === "running").length;
   const succeeded = sessions.filter((session) => session.status === "succeeded").length;
   const failed = sessions.filter((session) => ["failed", "needs_review"].includes(session.status)).length;

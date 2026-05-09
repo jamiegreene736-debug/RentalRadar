@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     scraper_proxy_urls: list[str] = Field(default_factory=list)
     scraper_proxy_redis_key: str = "rentalradar:proxy_pool"
     scraper_proxy_cooldown_seconds: int = 120
+    scraper_require_residential_proxy: bool = False
+    brightdata_proxy_server: str | None = None
+    brightdata_proxy_username: str | None = None
+    brightdata_proxy_password: str | None = None
     browser_worker_max_concurrent_browsers: int = 4
     browser_worker_metrics_port: int = 9108
     browser_action_log_dir: str = "/tmp/rentalradar/browser-actions"
