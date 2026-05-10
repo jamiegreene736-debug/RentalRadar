@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import date, timedelta
-from urllib.parse import quote_plus, urlencode, urlparse
+from urllib.parse import parse_qs, quote, quote_plus, urlencode, unquote_plus, urlparse, urlunparse
 from uuid import UUID
 
 from sqlalchemy import select
@@ -135,24 +135,87 @@ def create_property_and_jobs(
 
 
 def default_market_targets(address: str, checkin: date | None = None, checkout: date | None = None) -> list[str]:
-    query = quote_plus(address)
+    airbnb_query = quote_plus(address)
+    vrbo_path = _vrbo_keywords_path(address)
+    vrbo_query = _vrbo_search_query(checkin, checkout)
     if not checkin or not checkout:
         return [
-            f"https://www.airbnb.com/s/{query}/homes",
-            f"https://www.vrbo.com/search/keywords:{query}",
-            f"https://www.booking.com/searchresults.html?ss={query}",
+            f"https://www.airbnb.com/s/{airbnb_query}/homes",
+            f"https://www.vrbo.com{vrbo_path}",
+            f"https://www.booking.com/searchresults.html?ss={airbnb_query}",
         ]
 
     checkin_value = checkin.isoformat()
     checkout_value = checkout.isoformat()
     return [
-        f"https://www.airbnb.com/s/{query}/homes?"
+        f"https://www.airbnb.com/s/{airbnb_query}/homes?"
         f"{urlencode({'checkin': checkin_value, 'checkout': checkout_value, 'adults': 2})}",
-        f"https://www.vrbo.com/search/keywords:{query}?"
-        f"{urlencode({'d1': checkin_value, 'd2': checkout_value, 'adults': 2})}",
+        f"https://www.vrbo.com{vrbo_path}?{urlencode(vrbo_query)}",
         f"https://www.booking.com/searchresults.html?"
         f"{urlencode({'ss': address, 'checkin': checkin_value, 'checkout': checkout_value, 'group_adults': 2, 'no_rooms': 1, 'group_children': 0})}",
     ]
+
+
+def normalize_market_target_url(url: str, source: ScrapeSource) -> str:
+    """Keep queued OTA targets aligned with current guest-facing search URLs."""
+
+    if source != ScrapeSource.vrbo:
+        return url
+
+    parsed = urlparse(url)
+    if "vrbo" not in parsed.netloc.lower() and "homeaway" not in parsed.netloc.lower():
+        return url
+    if not parsed.path.startswith("/search/keywords:") and not parsed.path.startswith("/search/keywords%3A"):
+        return url
+
+    destination = unquote_plus(
+        parsed.path.split("/search/keywords:", 1)[1]
+        if parsed.path.startswith("/search/keywords:")
+        else parsed.path.split("/search/keywords%3A", 1)[1]
+    )
+    query = parse_qs(parsed.query)
+    checkin = _first_query_value(query, "startDate") or _first_query_value(query, "d1")
+    checkout = _first_query_value(query, "endDate") or _first_query_value(query, "d2")
+    adults = _first_query_value(query, "adults") or "2"
+    search_query = _vrbo_search_query(_date_or_none(checkin), _date_or_none(checkout), adults=adults)
+    return urlunparse((parsed.scheme or "https", parsed.netloc or "www.vrbo.com", _vrbo_keywords_path(destination), "", urlencode(search_query), ""))
+
+
+def _vrbo_keywords_path(destination: str) -> str:
+    return f"/search/keywords%3A{quote(destination, safe='')}"
+
+
+def _vrbo_search_query(
+    checkin: date | None = None,
+    checkout: date | None = None,
+    *,
+    adults: str | int = 2,
+) -> dict[str, str | int]:
+    query: dict[str, str | int] = {"adults": adults}
+    if checkin and checkout:
+        checkin_value = checkin.isoformat()
+        checkout_value = checkout.isoformat()
+        query.update(
+            {
+                "d1": checkin_value,
+                "d2": checkout_value,
+            }
+        )
+    return query
+
+
+def _first_query_value(query: dict[str, list[str]], key: str) -> str | None:
+    values = query.get(key)
+    return values[0] if values else None
+
+
+def _date_or_none(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def default_seasonal_market_targets(

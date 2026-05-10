@@ -23,6 +23,7 @@ from app.db.models import (
     Property,
     RateObservation,
 )
+from app.services.market_booked_data import MarketBookedRateSignal, fetch_market_booked_rate_signals
 
 
 MODEL_VERSION = "rentalradar-live-demand-v2"
@@ -99,10 +100,13 @@ class RentalRadarPricingEngine:
         performance_events: list[PricingPerformanceEvent],
         start_date: date,
         end_date: date,
+        market_booked_signals: list[MarketBookedRateSignal] | None = None,
+        market_booked_status: dict | None = None,
     ) -> list[PricingDecision]:
         market_by_date = _market_metrics_by_date(market_observations)
         events_by_date = _events_by_date(events)
         occupancy_by_date = _latest_occupancy_by_date(occupancy_signals)
+        booked_signals = market_booked_signals or []
         performance = _performance_summary(performance_events)
 
         decisions: list[PricingDecision] = []
@@ -110,11 +114,20 @@ class RentalRadarPricingEngine:
         while current <= end_date:
             market = market_by_date.get(current, _empty_market(current))
             occupancy = occupancy_by_date.get(current)
+            market_booked = _market_booked_signal_for_date(booked_signals, current)
             day_events = events_by_date.get(current, [])
             lead_time_days = max(0, (current - date.today()).days)
 
-            baseline = _baseline_rate_cents(rental, market)
-            multipliers = _multipliers(current, lead_time_days, market, occupancy, day_events, performance)
+            baseline = _baseline_rate_cents(rental, market, market_booked)
+            multipliers = _multipliers(
+                current,
+                lead_time_days,
+                market,
+                occupancy,
+                day_events,
+                performance,
+                market_booked,
+            )
             pre_ai_rate = int(baseline * math.prod(multipliers.values()))
 
             context = _decision_context(
@@ -124,6 +137,8 @@ class RentalRadarPricingEngine:
                 pre_ai_rate_cents=pre_ai_rate,
                 market=market,
                 occupancy=occupancy,
+                market_booked=market_booked,
+                market_booked_status=market_booked_status,
                 events=day_events,
                 multipliers=multipliers,
                 lead_time_days=lead_time_days,
@@ -135,7 +150,12 @@ class RentalRadarPricingEngine:
 
             min_stay = _recommended_min_stay(current, lead_time_days, market, occupancy, day_events)
             discount = _discount_percent(lead_time_days, market, occupancy)
-            confidence = _confidence_score(market, occupancy, day_events, performance) + ai_advice["confidence_bias"]
+            confidence = (
+                _confidence_score(market, occupancy, day_events, performance)
+                + ai_advice["confidence_bias"]
+            )
+            if market_booked:
+                confidence += min(0.08, market_booked.confidence * 0.08)
             confidence = max(0.05, min(0.98, confidence))
 
             explanation = context | {
@@ -151,6 +171,7 @@ class RentalRadarPricingEngine:
                     stay_date=current,
                     market=market,
                     occupancy=occupancy,
+                    market_booked=market_booked,
                     events=day_events,
                     rentalradar_rate_cents=recommended,
                 ),
@@ -217,6 +238,7 @@ def generate_recommendations(
             .where(PricingPerformanceEvent.stay_date <= start - timedelta(days=1))
         ).all()
     )
+    market_booked_result = fetch_market_booked_rate_signals(rental, start, end)
 
     decisions = RentalRadarPricingEngine().recommend(
         rental=rental,
@@ -226,6 +248,12 @@ def generate_recommendations(
         performance_events=performance,
         start_date=start,
         end_date=end,
+        market_booked_signals=market_booked_result.signals,
+        market_booked_status={
+            "provider": market_booked_result.provider,
+            "status": market_booked_result.status,
+            "message": market_booked_result.message,
+        },
     )
 
     old_recommendations = list(
@@ -293,7 +321,10 @@ def assign_active_experiments(
             select(PricingExperiment)
             .where(PricingExperiment.organization_id == rental.organization_id)
             .where(PricingExperiment.status == "running")
-            .where((PricingExperiment.property_id.is_(None)) | (PricingExperiment.property_id == rental.id))
+            .where(
+                (PricingExperiment.property_id.is_(None))
+                | (PricingExperiment.property_id == rental.id)
+            )
         ).all()
     )
     assignments: list[PricingExperimentAssignment] = []
@@ -318,15 +349,25 @@ def assign_active_experiments(
             variant_key = _assign_variant(experiment.id, rental.id, rec.stay_date, split, variants)
             variant = variants.get(variant_key, {})
             rate = int(rec.recommended_rate_cents * float(variant.get("rate_multiplier", 1.0)))
-            min_stay = max(1, (rec.recommended_min_stay or 1) + int(variant.get("min_stay_delta", 0)))
-            discount = max(0.0, min(100.0, float(rec.discount_percent or 0) + float(variant.get("discount_delta", 0))))
+            min_stay = max(
+                1, (rec.recommended_min_stay or 1) + int(variant.get("min_stay_delta", 0))
+            )
+            discount = max(
+                0.0,
+                min(
+                    100.0,
+                    float(rec.discount_percent or 0) + float(variant.get("discount_delta", 0)),
+                ),
+            )
             assignment = PricingExperimentAssignment(
                 experiment_id=experiment.id,
                 property_id=rental.id,
                 pricing_recommendation_id=rec.id,
                 stay_date=rec.stay_date,
                 variant_key=variant_key,
-                assigned_rate_cents=_clamp_rate(rate, rental.min_price_cents, rental.max_price_cents),
+                assigned_rate_cents=_clamp_rate(
+                    rate, rental.min_price_cents, rental.max_price_cents
+                ),
                 assigned_min_stay=min_stay,
                 assigned_discount_percent=round(discount, 2),
                 assignment_context={
@@ -365,7 +406,13 @@ def experiment_results(db: Session, experiment_id: UUID) -> dict:
     for assignment in assignments:
         bucket = by_variant.setdefault(
             assignment.variant_key,
-            {"assigned_nights": 0, "booked_nights": 0, "revenue_cents": 0, "adr_cents": 0, "revpar_cents": 0},
+            {
+                "assigned_nights": 0,
+                "booked_nights": 0,
+                "revenue_cents": 0,
+                "adr_cents": 0,
+                "revpar_cents": 0,
+            },
         )
         bucket["assigned_nights"] += 1
         events = by_assignment.get(assignment.id, [])
@@ -399,7 +446,9 @@ def _market_metrics_by_date(observations: list[RateObservation]) -> dict[date, M
             comp_median_cents=int(median(rates)) if rates else None,
             comp_p25_cents=_percentile(rates, 0.25),
             comp_p75_cents=_percentile(rates, 0.75),
-            available_ratio=sum(1 for value in available if value) / len(available) if available else None,
+            available_ratio=sum(1 for value in available if value) / len(available)
+            if available
+            else None,
             source_count=len({row.source.value for row in rows}),
             sample_size=len(rates),
             avg_extraction_confidence=sum(confidences) / len(confidences) if confidences else 0,
@@ -420,9 +469,22 @@ def _events_by_date(events: list[LocalEvent]) -> dict[date, list[LocalEvent]]:
 def _latest_occupancy_by_date(signals: list[OccupancySignal]) -> dict[date, OccupancySignal]:
     latest: dict[date, OccupancySignal] = {}
     for signal in signals:
-        if signal.stay_date not in latest or signal.observed_at > latest[signal.stay_date].observed_at:
+        if (
+            signal.stay_date not in latest
+            or signal.observed_at > latest[signal.stay_date].observed_at
+        ):
             latest[signal.stay_date] = signal
     return latest
+
+
+def _market_booked_signal_for_date(
+    signals: list[MarketBookedRateSignal],
+    stay_date: date,
+) -> MarketBookedRateSignal | None:
+    for signal in signals:
+        if signal.start_date <= stay_date <= signal.end_date:
+            return signal
+    return signals[0] if signals else None
 
 
 def _performance_summary(events: list[PricingPerformanceEvent]) -> dict:
@@ -451,7 +513,16 @@ def _empty_market(stay_date: date) -> MarketMetrics:
     )
 
 
-def _baseline_rate_cents(rental: Property, market: MarketMetrics) -> int:
+def _baseline_rate_cents(
+    rental: Property,
+    market: MarketMetrics,
+    market_booked: MarketBookedRateSignal | None,
+) -> int:
+    booked_rate = _booked_rate_cents(market_booked)
+    if market.comp_median_cents and booked_rate:
+        return int(market.comp_median_cents * 0.65 + booked_rate * 0.35)
+    if booked_rate:
+        return booked_rate
     if market.comp_median_cents:
         return market.comp_median_cents
     if rental.base_price_cents:
@@ -461,6 +532,12 @@ def _baseline_rate_cents(rental: Property, market: MarketMetrics) -> int:
     return 17500
 
 
+def _booked_rate_cents(signal: MarketBookedRateSignal | None) -> int | None:
+    if signal is None:
+        return None
+    return signal.median_booked_rate_cents or signal.average_booked_rate_cents
+
+
 def _multipliers(
     stay_date: date,
     lead_time_days: int,
@@ -468,6 +545,7 @@ def _multipliers(
     occupancy: OccupancySignal | None,
     events: list[LocalEvent],
     performance: dict,
+    market_booked: MarketBookedRateSignal | None,
 ) -> dict[str, float]:
     month = stay_date.month
     seasonal = {
@@ -485,17 +563,49 @@ def _multipliers(
         12: 1.10,
     }[month]
     dow = 1.14 if stay_date.weekday() in (4, 5) else 1.04 if stay_date.weekday() == 6 else 0.97
-    lead = 0.92 if lead_time_days <= 3 else 0.96 if lead_time_days <= 7 else 1.03 if lead_time_days >= 90 else 1.0
+    lead = (
+        0.92
+        if lead_time_days <= 3
+        else 0.96
+        if lead_time_days <= 7
+        else 1.03
+        if lead_time_days >= 90
+        else 1.0
+    )
     compression = 1.0
     if market.available_ratio is not None:
-        compression = 1.18 if market.available_ratio < 0.25 else 1.09 if market.available_ratio < 0.45 else 0.94 if market.available_ratio > 0.85 else 1.0
+        compression = (
+            1.18
+            if market.available_ratio < 0.25
+            else 1.09
+            if market.available_ratio < 0.45
+            else 0.94
+            if market.available_ratio > 0.85
+            else 1.0
+        )
     event = 1 + min(0.28, max((float(e.demand_score) for e in events), default=0) * 0.28)
     occ = 1.0
     if occupancy:
         market_occ = float(occupancy.market_occupancy or 0)
         pacing = float(occupancy.pacing_ratio or 1)
-        occ += 0.12 if market_occ >= 0.85 else 0.06 if market_occ >= 0.72 else -0.05 if market_occ <= 0.45 else 0
+        occ += (
+            0.12
+            if market_occ >= 0.85
+            else 0.06
+            if market_occ >= 0.72
+            else -0.05
+            if market_occ <= 0.45
+            else 0
+        )
         occ += 0.04 if pacing >= 1.15 else -0.04 if pacing <= 0.85 else 0
+    if market_booked and market_booked.occupancy is not None:
+        occ += (
+            0.06
+            if market_booked.occupancy >= 0.78
+            else -0.04
+            if market_booked.occupancy <= 0.42
+            else 0
+        )
     historical = 1.0
     conversion = performance.get("conversion_rate")
     if conversion is not None:
@@ -518,6 +628,8 @@ def _decision_context(
     pre_ai_rate_cents: int,
     market: MarketMetrics,
     occupancy: OccupancySignal | None,
+    market_booked: MarketBookedRateSignal | None,
+    market_booked_status: dict | None,
     events: list[LocalEvent],
     multipliers: dict[str, float],
     lead_time_days: int,
@@ -525,7 +637,10 @@ def _decision_context(
 ) -> dict:
     event_strength = max((float(event.demand_score) for event in events), default=0)
     compression = 1 - market.available_ratio if market.available_ratio is not None else 0.5
-    live_quality = min(1.0, (market.sample_size / 12) * 0.7 + market.avg_extraction_confidence * 0.3)
+    live_quality = min(
+        1.0, (market.sample_size / 12) * 0.7 + market.avg_extraction_confidence * 0.3
+    )
+    booked_rate = _booked_rate_cents(market_booked)
     return {
         "property": {
             "id": str(rental.id),
@@ -557,10 +672,38 @@ def _decision_context(
             for event in events
         ],
         "occupancy": {
-            "property_occupancy": float(occupancy.property_occupancy) if occupancy and occupancy.property_occupancy is not None else None,
-            "market_occupancy": float(occupancy.market_occupancy) if occupancy and occupancy.market_occupancy is not None else None,
-            "pacing_ratio": float(occupancy.pacing_ratio) if occupancy and occupancy.pacing_ratio is not None else None,
+            "property_occupancy": float(occupancy.property_occupancy)
+            if occupancy and occupancy.property_occupancy is not None
+            else None,
+            "market_occupancy": float(occupancy.market_occupancy)
+            if occupancy and occupancy.market_occupancy is not None
+            else None,
+            "pacing_ratio": float(occupancy.pacing_ratio)
+            if occupancy and occupancy.pacing_ratio is not None
+            else None,
             "pickup_7d": occupancy.pickup_7d if occupancy else None,
+        },
+        "market_booked_rate": {
+            "source": market_booked.source
+            if market_booked
+            else market_booked_status.get("provider")
+            if market_booked_status
+            else None,
+            "status": market_booked_status.get("status")
+            if market_booked_status
+            else "not_requested",
+            "message": market_booked_status.get("message") if market_booked_status else None,
+            "average_booked_rate_cents": market_booked.average_booked_rate_cents
+            if market_booked
+            else None,
+            "median_booked_rate_cents": market_booked.median_booked_rate_cents
+            if market_booked
+            else None,
+            "booked_rate_cents": booked_rate,
+            "market_occupancy": market_booked.occupancy if market_booked else None,
+            "revpar_cents": market_booked.revpar_cents if market_booked else None,
+            "sample_size": market_booked.sample_size if market_booked else 0,
+            "confidence": market_booked.confidence if market_booked else 0,
         },
         "multipliers": {key: round(value, 4) for key, value in multipliers.items()},
         "signals": {
@@ -578,21 +721,29 @@ def _competitive_comparison(
     stay_date: date,
     market: MarketMetrics,
     occupancy: OccupancySignal | None,
+    market_booked: MarketBookedRateSignal | None,
     events: list[LocalEvent],
     rentalradar_rate_cents: int,
 ) -> dict:
     base = rental.base_price_cents or market.comp_median_cents or rentalradar_rate_cents
-    beyond_style = int(base * (1.12 if stay_date.weekday() in (4, 5) else 1.0))
+    calendar_benchmark = int(base * (1.12 if stay_date.weekday() in (4, 5) else 1.0))
     if events:
-        beyond_style = int(beyond_style * 1.08)
-    wheelhouse_style = market.comp_median_cents or base
+        calendar_benchmark = int(calendar_benchmark * 1.08)
+    comp_blend = market.comp_median_cents or base
+    booked_rate = _booked_rate_cents(market_booked)
+    if booked_rate and market.comp_median_cents:
+        comp_blend = int(market.comp_median_cents * 0.6 + booked_rate * 0.4)
+    elif booked_rate:
+        comp_blend = booked_rate
     if occupancy and occupancy.market_occupancy is not None:
-        wheelhouse_style = int(wheelhouse_style * (1 + (float(occupancy.market_occupancy) - 0.65) * 0.25))
+        comp_blend = int(comp_blend * (1 + (float(occupancy.market_occupancy) - 0.65) * 0.25))
     return {
-        "beyond_style_calendar_rate_cents": beyond_style,
-        "wheelhouse_style_comp_rate_cents": wheelhouse_style,
+        "calendar_benchmark_rate_cents": calendar_benchmark,
+        "comp_blend_rate_cents": comp_blend,
+        "market_paid_rate_cents": booked_rate,
+        "market_paid_source": market_booked.source if market_booked else None,
         "rentalradar_live_rate_cents": rentalradar_rate_cents,
-        "advantage": "RentalRadar weights fresh scraped availability, source confidence, PMS pacing, and event strength in the same decision rather than relying mainly on static calendar/market curves.",
+        "advantage": "RentalRadar weights fresh guest-visible rates, market booked-rate evidence, PMS pacing, source confidence, and event strength in the same decision rather than relying on one data source.",
     }
 
 
@@ -609,7 +760,11 @@ def _recommended_min_stay(
         return 2
     if lead_time_days <= 5:
         return 1
-    if occupancy and occupancy.market_occupancy is not None and float(occupancy.market_occupancy) >= 0.85:
+    if (
+        occupancy
+        and occupancy.market_occupancy is not None
+        and float(occupancy.market_occupancy) >= 0.85
+    ):
         return 2
     if market.available_ratio is not None and market.available_ratio < 0.3:
         return 2
@@ -622,12 +777,20 @@ def _discount_percent(
     occupancy: OccupancySignal | None,
 ) -> float:
     soft_market = market.available_ratio is not None and market.available_ratio > 0.75
-    weak_occ = occupancy and occupancy.market_occupancy is not None and float(occupancy.market_occupancy) < 0.45
+    weak_occ = (
+        occupancy
+        and occupancy.market_occupancy is not None
+        and float(occupancy.market_occupancy) < 0.45
+    )
     if lead_time_days <= 3 and (soft_market or weak_occ):
         return 15.0
     if lead_time_days <= 7 and (soft_market or weak_occ):
         return 10.0
-    if lead_time_days >= 45 and market.available_ratio is not None and market.available_ratio < 0.35:
+    if (
+        lead_time_days >= 45
+        and market.available_ratio is not None
+        and market.available_ratio < 0.35
+    ):
         return 0.0
     return 5.0 if soft_market else 0.0
 
@@ -642,8 +805,12 @@ def _confidence_score(
     extraction_score = market.avg_extraction_confidence * 0.22
     occupancy_score = 0.16 if occupancy else 0
     event_score = 0.08 if events else 0
-    performance_score = 0.10 if performance.get("nights", 0) >= 20 else 0.03 if performance.get("nights", 0) else 0
-    return 0.18 + market_score + extraction_score + occupancy_score + event_score + performance_score
+    performance_score = (
+        0.10 if performance.get("nights", 0) >= 20 else 0.03 if performance.get("nights", 0) else 0
+    )
+    return (
+        0.18 + market_score + extraction_score + occupancy_score + event_score + performance_score
+    )
 
 
 def _assign_variant(
@@ -655,7 +822,9 @@ def _assign_variant(
 ) -> str:
     if not split:
         split = {key: 1 / len(variants) for key in variants}
-    score = int(hashlib.sha256(f"{experiment_id}:{property_id}:{stay_date}".encode()).hexdigest()[:8], 16)
+    score = int(
+        hashlib.sha256(f"{experiment_id}:{property_id}:{stay_date}".encode()).hexdigest()[:8], 16
+    )
     bucket = score / 0xFFFFFFFF
     cumulative = 0.0
     for key, weight in split.items():
@@ -690,5 +859,7 @@ def _summary_from_context(context: dict) -> str:
     if signals["market_compression"] >= 0.70:
         return "Fresh scraped availability shows compressed supply, supporting a higher live-market rate."
     if signals["lead_time_days"] <= 7:
-        return "Near-term pricing balances booking urgency against current live-market availability."
+        return (
+            "Near-term pricing balances booking urgency against current live-market availability."
+        )
     return "Live comp rates, seasonality, and occupancy pacing are aligned enough for a steady optimized rate."

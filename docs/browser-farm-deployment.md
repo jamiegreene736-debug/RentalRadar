@@ -105,7 +105,16 @@ TOKEN_ENCRYPTION_KEY=...
 SCRAPER_HEADLESS=false
 BROWSER_WORKER_MAX_CONCURRENT_BROWSERS=4
 SCRAPER_PROXY_REDIS_KEY=rentalradar:proxy_pool
+SCRAPER_REQUIRE_RESIDENTIAL_PROXY=true
+BRIGHTDATA_PROXY_SERVER=http://brd.superproxy.io:33335
+BRIGHTDATA_PROXY_USERNAME=...
+BRIGHTDATA_PROXY_PASSWORD=...
 ```
+
+If the provider dashboard gives split fields instead of a full proxy URL, set
+`BRIGHTDATA_PROXY_HOST`, `BRIGHTDATA_PROXY_PORT`, `BRIGHTDATA_PROXY_USERNAME`,
+and `BRIGHTDATA_PROXY_PASSWORD`; the worker composes the Playwright proxy server
+from those values and keeps credentials separate from the server URL.
 
 Run:
 

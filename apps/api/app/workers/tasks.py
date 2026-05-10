@@ -55,6 +55,7 @@ from app.workers.celery_app import celery_app
 def initialize_worker_metrics(**_: object) -> None:
     start_metrics_server()
     refresh_worker_metrics()
+    _requeue_queued_scrape_jobs()
 
 
 @celery_app.task(name="app.workers.tasks.run_scrape_job", bind=True, max_retries=2)
@@ -66,6 +67,8 @@ def run_scrape_job(self, scrape_job_id: str) -> dict:
             return {"status": "missing", "scrape_job_id": scrape_job_id}
         if job.status == ScrapeJobStatus.canceled:
             return {"status": "canceled", "scrape_job_id": scrape_job_id}
+        if job.status != ScrapeJobStatus.queued:
+            return {"status": job.status.value, "scrape_job_id": scrape_job_id}
 
         job.status = ScrapeJobStatus.running
         job.started_at = datetime.now(timezone.utc)
@@ -141,6 +144,27 @@ def run_scrape_job(self, scrape_job_id: str) -> dict:
         db.add(training)
 
         if not run.result.success:
+            blocker = run.result.diagnostics.get("blocker") if isinstance(run.result.diagnostics, dict) else None
+            if _is_non_retryable_browser_blocker(blocker):
+                job.status = ScrapeJobStatus.needs_review
+                job.completed_at = datetime.now(timezone.utc)
+                job.error_code = f"ota_{blocker['kind']}"
+                job.error_message = run.result.error_message
+                db.add(ScrapeJobLog(
+                    scrape_job_id=job.id,
+                    level="warning",
+                    event="scrape.needs_review",
+                    message=run.result.error_message,
+                    payload=run.result.diagnostics,
+                ))
+                db.commit()
+                return {
+                    "status": "needs_review",
+                    "scrape_job_id": scrape_job_id,
+                    "error": run.result.error_message,
+                    "error_code": job.error_code,
+                }
+
             job.status = ScrapeJobStatus.failed
             job.error_message = run.result.error_message
             db.add(ScrapeJobLog(
@@ -253,6 +277,61 @@ def run_scrape_job(self, scrape_job_id: str) -> dict:
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc, countdown=retry_delay)
         return {"status": "failed", "scrape_job_id": scrape_job_id, "error": str(exc)}
+    finally:
+        db.close()
+
+
+def _is_non_retryable_browser_blocker(blocker: object) -> bool:
+    if not isinstance(blocker, dict):
+        return False
+    return blocker.get("kind") in {
+        "proxy_auth_required",
+        "bot_challenge",
+        "captcha",
+        "access_denied",
+        "login_wall",
+        "rate_limited",
+    }
+
+
+def _requeue_queued_scrape_jobs(limit: int = 50) -> int:
+    """Republish DB-queued scrape jobs after worker restarts.
+
+    The database is the durable queue source for the UI, but Celery retry messages
+    can be interrupted by deploys. On boot, reconcile queued rows back onto Celery.
+    """
+
+    db = SessionLocal()
+    try:
+        jobs = db.scalars(
+            select(ScrapeJob)
+            .where(ScrapeJob.status == ScrapeJobStatus.queued)
+            .order_by(ScrapeJob.priority.asc(), ScrapeJob.created_at.asc())
+            .limit(limit)
+        ).all()
+        requeued = 0
+        now = datetime.now(timezone.utc)
+        for job in jobs:
+            context = dict(job.request_context or {})
+            context["worker_boot_requeued_at"] = now.isoformat()
+            job.request_context = context
+            db.add(
+                ScrapeJobLog(
+                    scrape_job_id=job.id,
+                    level="info",
+                    event="scrape.requeued",
+                    message="Queued scrape job republished after browser worker startup.",
+                    payload={"source": "worker_ready"},
+                )
+            )
+            run_scrape_job.delay(str(job.id))
+            requeued += 1
+        if requeued:
+            db.commit()
+        return requeued
+    except Exception:
+        db.rollback()
+        return 0
     finally:
         db.close()
 

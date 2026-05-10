@@ -5,10 +5,13 @@ import re
 from datetime import date, timedelta
 from typing import Any
 
+import httpx
+
 from app.agents.types import ExtractedRate, ScrapeExecutionResult, ScrapeTarget, ScraperStrategyPlan
 from app.browser_farm.headed import launch_headed_browser
 from app.browser_farm.proxy import ProxyLease
 from app.browser_farm.stealth import human_scroll, human_type
+from app.services.market import normalize_market_target_url
 
 
 async def run_trained_scraping_script(
@@ -102,13 +105,33 @@ async def execute_generated_scraper_code(
 
 async def _execute_strategy_steps(page: Any, target: ScrapeTarget, strategy: ScraperStrategyPlan) -> dict[str, Any]:
     diagnostics: dict[str, Any] = {"mode": "json_strategy"}
-    await page.goto(target.url, wait_until="domcontentloaded", timeout=60_000)
+    navigation_url = normalize_market_target_url(target.url, target.source)
+    if navigation_url != target.url:
+        diagnostics["normalized_target_url"] = navigation_url
+    action_logger = getattr(page, "_rentalradar_action_logger", None)
+    try:
+        response = await page.goto(navigation_url, wait_until="domcontentloaded", timeout=60_000)
+        if response is not None:
+            diagnostics["navigation_status"] = response.status
+    except Exception as exc:
+        blocker = await _detect_navigation_error_page(
+            page,
+            exception_message=str(exc),
+        )
+        if blocker is None:
+            blocker = await _probe_navigation_blocker(navigation_url, str(exc))
+        if blocker:
+            diagnostics["blocker"] = blocker
+            diagnostics["navigation_error"] = str(exc)
+            if action_logger:
+                action_logger.write("scrape.blocker_detected", blocker)
+            return _blocked_payload(diagnostics, blocker)
+        raise
     try:
         await page.wait_for_load_state("networkidle", timeout=10_000)
     except Exception:
         pass
     await page.wait_for_timeout(1_500)
-    action_logger = getattr(page, "_rentalradar_action_logger", None)
     if action_logger:
         await action_logger.screenshot(page, "scrape.page_loaded")
     await human_scroll(page, min_scrolls=1, max_scrolls=3)
@@ -193,25 +216,128 @@ async def _detect_browser_blocker(page: Any, html: str) -> dict[str, Any] | None
     except Exception:
         body_text = ""
 
-    haystack = f"{title}\n{body_text[:5000]}\n{html[:5000]}".lower()
+    return _blocker_from_text(
+        title=title,
+        body_text=body_text,
+        html=html,
+        url=page.url,
+    )
+
+
+async def _detect_navigation_error_page(page: Any, *, exception_message: str) -> dict[str, Any] | None:
+    if "ERR_HTTP_RESPONSE_CODE_FAILURE" not in exception_message:
+        return None
+    title = ""
+    body_text = ""
+    html = ""
+    try:
+        title = await page.title()
+    except Exception:
+        pass
+    try:
+        body_text = await page.locator("body").inner_text(timeout=1_500)
+    except Exception:
+        pass
+    try:
+        html = await page.content()
+    except Exception:
+        pass
+    if not title and not body_text and not html:
+        return None
+    return _blocker_from_text(
+        title=title,
+        body_text=body_text,
+        html=html,
+        url=page.url,
+    )
+
+
+async def _probe_navigation_blocker(url: str, exception_message: str) -> dict[str, Any] | None:
+    if "ERR_HTTP_RESPONSE_CODE_FAILURE" not in exception_message:
+        return None
+    headers = {
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "accept-language": "en-US,en;q=0.9",
+        "user-agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True, headers=headers) as client:
+            response = await client.get(url)
+    except httpx.HTTPError:
+        return None
+
+    title_match = re.search(r"<title[^>]*>(.*?)</title>", response.text, flags=re.IGNORECASE | re.DOTALL)
+    title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else ""
+    return _blocker_from_text(
+        title=title,
+        body_text="",
+        html=response.text,
+        url=str(response.url),
+        status=response.status_code,
+    )
+
+
+def _blocker_from_text(
+    *,
+    title: str,
+    body_text: str,
+    html: str,
+    url: str,
+    status: int | None = None,
+) -> dict[str, Any] | None:
+    haystack = f"{status or ''}\n{title}\n{body_text[:5000]}\n{html[:5000]}".lower()
     checks = [
+        ("proxy_auth_required", ["proxy authentication required", "http error 407", "\n407\n"]),
         ("captcha", ["captcha", "recaptcha", "hcaptcha", "verify you are human", "human verification"]),
-        ("bot_challenge", ["unusual traffic", "automated access", "are you a robot", "robot check", "security check"]),
+        (
+            "bot_challenge",
+            [
+                "bot or not",
+                "datadome-challenge",
+                "arkose",
+                "unusual traffic",
+                "automated access",
+                "are you a robot",
+                "robot check",
+                "security check",
+            ],
+        ),
         ("access_denied", ["access denied", "forbidden", "request blocked", "temporarily blocked"]),
         ("login_wall", ["sign in to continue", "log in to continue", "create an account to continue"]),
-        ("rate_limited", ["too many requests", "rate limit", "try again later"]),
+        ("rate_limited", ["429", "too many requests", "rate limit", "try again later"]),
     ]
     for kind, needles in checks:
         matched = next((needle for needle in needles if needle in haystack), None)
         if matched:
+            message = (
+                "Chrome could not authenticate with the residential proxy. Check the proxy server, username, and password."
+                if kind == "proxy_auth_required"
+                else f"Chrome hit a {kind.replace('_', ' ')} while loading the OTA page."
+            )
             return {
                 "kind": kind,
-                "message": f"Chrome hit a {kind.replace('_', ' ')} while loading the OTA page.",
+                "message": message,
                 "matched_text": matched,
-                "url": page.url,
+                "url": url,
                 "title": title,
+                "http_status": status,
             }
     return None
+
+
+def _blocked_payload(diagnostics: dict[str, Any], blocker: dict[str, Any]) -> dict[str, Any]:
+    fingerprint = hashlib.sha256(repr(blocker).encode()).hexdigest()
+    return {
+        "rates": [],
+        "confidence": 0,
+        "diagnostics": diagnostics,
+        "dom_fingerprint": fingerprint[:16],
+        "raw_html_url": f"memory://{fingerprint}",
+        "error_message": blocker["message"],
+    }
 
 
 async def _extract_rates_from_page(page: Any, target: ScrapeTarget, strategy: ScraperStrategyPlan) -> list[dict[str, Any]]:

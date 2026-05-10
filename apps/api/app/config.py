@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     scraper_proxy_cooldown_seconds: int = 120
     scraper_require_residential_proxy: bool = False
     brightdata_proxy_server: str | None = None
+    brightdata_proxy_scheme: str = "http"
+    brightdata_proxy_host: str | None = None
+    brightdata_proxy_port: int | None = None
     brightdata_proxy_username: str | None = None
     brightdata_proxy_password: str | None = None
     browser_worker_max_concurrent_browsers: int = 4
@@ -43,6 +46,11 @@ class Settings(BaseSettings):
     free_tier_property_limit: int = 1
     default_market_scan_days: int = 90
     default_comp_limit: int = 12
+    market_booked_data_provider: str = "none"
+    airroi_api_key: str | None = None
+    airroi_base_url: str = "https://api.airroi.com"
+    airroi_radius_miles: float = 5.0
+    airroi_page_size: int = 50
     integration_http_timeout_seconds: float = 30.0
     integration_max_retries: int = 3
     scraper_headless: bool = False
@@ -62,7 +70,7 @@ class Settings(BaseSettings):
         """
         for prefix in ("postgresql+psycopg2://", "postgresql://"):
             if value.startswith(prefix):
-                return "postgresql+psycopg://" + value[len(prefix):]
+                return "postgresql+psycopg://" + value[len(prefix) :]
         return value
 
     @field_validator("scraper_proxy_urls", mode="before")
@@ -78,6 +86,11 @@ class Settings(BaseSettings):
             self.celery_broker_url = self.redis_url
         if self.celery_result_backend is None:
             self.celery_result_backend = self.redis_url
+        if self.brightdata_proxy_server is None and self.brightdata_proxy_host:
+            host = self.brightdata_proxy_host
+            if self.brightdata_proxy_port is not None and ":" not in host.rsplit("@", 1)[-1]:
+                host = f"{host}:{self.brightdata_proxy_port}"
+            self.brightdata_proxy_server = f"{self.brightdata_proxy_scheme}://{host}"
         return self
 
 

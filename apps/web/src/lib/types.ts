@@ -54,10 +54,24 @@ export type PricingRecommendation = {
   reason: {
     ai_advice?: { summary?: string; risk_flags?: string[] };
     competitive_logic?: {
-      beyond_style_calendar_rate_cents?: number;
-      wheelhouse_style_comp_rate_cents?: number;
+      calendar_benchmark_rate_cents?: number;
+      comp_blend_rate_cents?: number;
+      market_paid_rate_cents?: number | null;
+      market_paid_source?: string | null;
       rentalradar_live_rate_cents?: number;
       advantage?: string;
+    };
+    market_booked_rate?: {
+      source?: string | null;
+      status?: string | null;
+      message?: string | null;
+      average_booked_rate_cents?: number | null;
+      median_booked_rate_cents?: number | null;
+      booked_rate_cents?: number | null;
+      market_occupancy?: number | null;
+      revpar_cents?: number | null;
+      sample_size?: number;
+      confidence?: number;
     };
     market?: {
       sample_size?: number;
@@ -120,8 +134,8 @@ export type ScrapeSessionsResponse = {
 export type RateForecastNight = {
   stay_date: string;
   recommended_rate_cents: number;
-  beyond_pricing_rate_cents: number;
-  wheelhouse_style_rate_cents: number;
+  market_benchmark_rate_cents: number;
+  comp_blend_rate_cents: number;
   estimated_occupancy: number;
   estimated_revenue_cents: number;
   confidence: number;
@@ -130,12 +144,116 @@ export type RateForecastNight = {
 export type MonthlyRateForecast = {
   month: string;
   average_recommended_rate_cents: number;
-  average_beyond_pricing_rate_cents: number;
-  average_wheelhouse_style_rate_cents: number;
+  average_market_benchmark_rate_cents: number;
+  average_comp_blend_rate_cents: number;
   estimated_occupancy: number;
   estimated_revenue_cents: number;
-  beyond_pricing_revenue_cents: number;
-  extra_income_vs_beyond_cents: number;
+  market_benchmark_revenue_cents: number;
+  extra_income_vs_market_cents: number;
+};
+
+export type MarketSourceEvidence = {
+  source: string;
+  label: string;
+  role: string;
+  status: string;
+  sample_count: number;
+  median_rate_cents: number | null;
+  average_rate_cents: number | null;
+  low_rate_cents: number | null;
+  high_rate_cents: number | null;
+  confidence: number;
+  last_observed_at: string | null;
+  note: string;
+};
+
+export type BaseRateModel = {
+  method: string;
+  base_rate_cents: number;
+  market_median_rate_cents: number | null;
+  market_average_rate_cents: number | null;
+  sample_size: number;
+  source_count: number;
+  booked_rate_feed: string;
+  explanation: string;
+};
+
+export type PricingAdjustmentLayer = {
+  code: string;
+  label: string;
+  category: string;
+  data_feed: string;
+  adjustment_percent: number;
+  rate_impact_cents: number;
+  confidence: number;
+  status: string;
+  description: string;
+};
+
+export type PricingToolCoverage = {
+  code: string;
+  label: string;
+  category: string;
+  status: string;
+  priority: string;
+  current_value: string;
+  recommended_value: string;
+  control_references: string[];
+  data_needed: string;
+  description: string;
+};
+
+export type PricingControls = {
+  property_id: string;
+  base_price_cents: number | null;
+  min_price_cents: number | null;
+  max_price_cents: number | null;
+  absolute_min_price_cents: number | null;
+  global_min_stay: number;
+  weekday_min_stay: number;
+  weekend_min_stay: number;
+  gap_night_min_stay: number;
+  gap_night_discount_percent: number;
+  last_minute_window_days: number;
+  last_minute_discount_percent: number;
+  far_future_window_days: number;
+  far_future_premium_percent: number;
+  orphan_gap_enabled: boolean;
+  seasonal_rules_enabled: boolean;
+  event_rules_enabled: boolean;
+  pacing_adjustments_enabled: boolean;
+  review_adjustments_enabled: boolean;
+  availability_yielding_enabled: boolean;
+  channel_fee_preview_enabled: boolean;
+};
+
+export type SeasonBand = {
+  code: "low" | "middle" | "high" | string;
+  label: string;
+  months: number[];
+  month_labels: string[];
+  multiplier: number;
+  minimum_stay_nights: number;
+  booking_posture: string;
+  notes: string;
+};
+
+export type HolidayWindow = {
+  label: string;
+  date_window: string;
+  multiplier: number;
+  minimum_stay_nights: number;
+  notes: string;
+};
+
+export type SeasonCalendarResponse = {
+  property_id: string;
+  market_key: string;
+  market_label: string;
+  basis: string;
+  current_model_note: string;
+  seasons: SeasonBand[];
+  holidays: HolidayWindow[];
 };
 
 export type RateForecastResponse = {
@@ -146,10 +264,14 @@ export type RateForecastResponse = {
   generated_at: string;
   estimated_occupancy: number;
   recommended_total_revenue_cents: number;
-  beyond_pricing_total_revenue_cents: number;
-  extra_income_vs_beyond_cents: number;
+  market_benchmark_total_revenue_cents: number;
+  extra_income_vs_market_cents: number;
   confidence: number;
   explanation: string;
+  base_rate_model: BaseRateModel;
+  market_sources: MarketSourceEvidence[];
+  adjustment_layers: PricingAdjustmentLayer[];
+  pricing_tools: PricingToolCoverage[];
   monthly: MonthlyRateForecast[];
   nights: RateForecastNight[];
 };

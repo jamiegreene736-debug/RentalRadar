@@ -69,8 +69,18 @@ export interface Organization {
 export interface AppUser {
   id: UUID;
   email: string;
+  firstName: string | null;
+  lastName: string | null;
   fullName: string | null;
   avatarUrl: string | null;
+  phoneNumber: string | null;
+  companyName: string | null;
+  jobTitle: string | null;
+  timezone: string;
+  locale: string;
+  notificationEmail: string | null;
+  marketingOptIn: boolean;
+  profileCompletedAt: ISODateTime | null;
   clerkUserId: string | null;
   supabaseAuthUserId: UUID | null;
   defaultOrganizationId: UUID | null;

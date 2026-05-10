@@ -1,16 +1,19 @@
 import Link from "next/link";
+import { currentUser } from "@clerk/nextjs/server";
 
 import { AccountProfile } from "@/app/(dashboard)/components/account-profile";
+import { BackendAccountProfileForm } from "@/app/(dashboard)/components/backend-account-profile-form";
 import { GlassCard, PanelTitle } from "@/app/(dashboard)/components/glass-card";
 import { Button } from "@/components/ui/button";
 import { isClerkEnabled } from "@/lib/auth-config";
+import { getAccountProfile } from "@/lib/api";
 
 export const metadata = {
   title: "Account",
   description: "Manage your RentalRadar account profile.",
 };
 
-export default function AccountPage() {
+export default async function AccountPage() {
   if (!isClerkEnabled) {
     return (
       <GlassCard className="p-6">
@@ -26,6 +29,8 @@ export default function AccountPage() {
     );
   }
 
+  const [user, profile] = await Promise.all([currentUser(), getAccountProfile()]);
+
   return (
     <div className="grid gap-6">
       <div>
@@ -35,6 +40,15 @@ export default function AccountPage() {
           Update your name, email addresses, connected Google login, password, and security settings.
         </p>
       </div>
+      <BackendAccountProfileForm
+        profile={profile}
+        clerkDefaults={{
+          email: user?.primaryEmailAddress?.emailAddress || "",
+          firstName: user?.firstName || "",
+          lastName: user?.lastName || "",
+          avatarUrl: user?.imageUrl,
+        }}
+      />
       <AccountProfile />
     </div>
   );

@@ -9,6 +9,7 @@ import {
   OtaDirectStatusResponse,
   PropertyResponse,
   ScrapingLegalNoticeResponse,
+  SeasonCalendarResponse,
   TargetOccupancyPlanResponse,
   UsageSummaryResponse,
 } from "@/lib/types";
@@ -123,6 +124,16 @@ export async function queuePropertyMarketScan(propertyId: string): Promise<Marke
   return apiFetch<MarketScanResponse>(`/properties/${propertyId}/market-scan`, {
     method: "POST",
   });
+}
+
+export async function getSeasonCalendar(propertyId: string): Promise<SeasonCalendarResponse | null> {
+  try {
+    return await apiFetch<SeasonCalendarResponse>(`/properties/${propertyId}/season-calendar`, {
+      cache: "no-store",
+    });
+  } catch {
+    return null;
+  }
 }
 
 export async function connectPms(payload: Record<string, unknown>) {

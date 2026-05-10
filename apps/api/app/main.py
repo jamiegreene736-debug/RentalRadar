@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import billing, health, metrics, ops, ota, pms, pricing, properties
+from app.api.routes import account, billing, health, metrics, ops, ota, pms, pricing, properties
 from app.config import get_settings
 from app.middleware.rate_limit import RedisRateLimitMiddleware
 
@@ -22,6 +22,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RedisRateLimitMiddleware)
 
     app.include_router(health.router)
+    app.include_router(account.router)
     app.include_router(properties.router)
     app.include_router(pms.router)
     app.include_router(pricing.router)

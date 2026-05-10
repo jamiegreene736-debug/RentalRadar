@@ -113,8 +113,18 @@ class Organization(CamelModel):
 class AppUser(CamelModel):
     id: UUID
     email: str
+    first_name: str | None = None
+    last_name: str | None = None
     full_name: str | None = None
     avatar_url: str | None = None
+    phone_number: str | None = None
+    company_name: str | None = None
+    job_title: str | None = None
+    timezone: str = "America/New_York"
+    locale: str = "en-US"
+    notification_email: str | None = None
+    marketing_opt_in: bool = False
+    profile_completed_at: datetime | None = None
     clerk_user_id: str | None = None
     supabase_auth_user_id: UUID | None = None
     default_organization_id: UUID | None = None

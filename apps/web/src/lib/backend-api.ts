@@ -12,6 +12,7 @@ const PRODUCTION_PRIVATE_API_URLS = [
 
 const FALLBACK_ORG_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "00000000-0000-0000-0000-000000000001";
 const FALLBACK_USER_ID = process.env.NEXT_PUBLIC_USER_ID ?? "00000000-0000-0000-0000-000000000002";
+const BACKEND_FETCH_TIMEOUT_MS = Number(process.env.BACKEND_FETCH_TIMEOUT_MS ?? 15000);
 
 export const ORG_ID = FALLBACK_ORG_ID;
 export const USER_ID = FALLBACK_USER_ID;
@@ -42,6 +43,7 @@ export async function fetchBackend(path: string, options: BackendFetchOptions = 
         headers,
         body: options.json !== undefined ? JSON.stringify(options.json) : options.body,
         cache: options.cache ?? (options.next ? undefined : "no-store"),
+        signal: options.signal ?? AbortSignal.timeout(BACKEND_FETCH_TIMEOUT_MS),
       });
     } catch (error) {
       lastError = error;

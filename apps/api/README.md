@@ -42,6 +42,7 @@ Production should derive these from Clerk or Supabase JWT claims and reject spoo
 The engine lives in `app/services/pricing_engine.py` and combines:
 
 - fresh scraped comp rates and availability compression
+- optional market booked-rate benchmarks from AirROI
 - seasonality and day-of-week curves
 - lead-time urgency
 - local events
@@ -58,6 +59,18 @@ Useful endpoints:
 - `POST /pricing/experiments`
 - `GET /pricing/experiments/{experiment_id}/results`
 - `POST /pricing/performance`
+
+Optional booked-rate market data:
+
+- `MARKET_BOOKED_DATA_PROVIDER=airroi`
+- `AIRROI_API_KEY=...`
+- `AIRROI_BASE_URL=https://api.airroi.com`
+- `AIRROI_RADIUS_MILES=5`
+- `AIRROI_PAGE_SIZE=50`
+
+When enabled, the recommendation run calls AirROI's radius listing search once per property/run,
+summarizes nearby historical ADR/occupancy/RevPAR fields, and blends that paid-market signal
+with RentalRadar's live guest-visible comp rates.
 
 ## PMS and OTA sync
 

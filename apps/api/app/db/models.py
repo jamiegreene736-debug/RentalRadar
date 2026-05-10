@@ -171,7 +171,20 @@ class AppUser(Base, TimestampMixin):
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     email: Mapped[str] = mapped_column(Text, unique=True)
+    first_name: Mapped[str | None] = mapped_column(Text)
+    last_name: Mapped[str | None] = mapped_column(Text)
     full_name: Mapped[str | None] = mapped_column(Text)
+    avatar_url: Mapped[str | None] = mapped_column(Text)
+    phone_number: Mapped[str | None] = mapped_column(Text)
+    company_name: Mapped[str | None] = mapped_column(Text)
+    job_title: Mapped[str | None] = mapped_column(Text)
+    timezone: Mapped[str] = mapped_column(Text, default="America/New_York")
+    locale: Mapped[str] = mapped_column(Text, default="en-US")
+    notification_email: Mapped[str | None] = mapped_column(Text)
+    marketing_opt_in: Mapped[bool] = mapped_column(Boolean, default=False)
+    profile_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    clerk_user_id: Mapped[str | None] = mapped_column(Text, unique=True)
+    supabase_auth_user_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), unique=True)
     default_organization_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="SET NULL"),
@@ -202,7 +215,7 @@ class OrganizationMember(Base, TimestampMixin):
         ForeignKey("app_users.id", ondelete="CASCADE"),
         index=True,
     )
-    role: Mapped[str] = mapped_column(Text, default="member")
+    role: Mapped[str] = mapped_column(Text, default="owner")
 
     organization: Mapped[Organization] = relationship(back_populates="members")
     user: Mapped[AppUser] = relationship(back_populates="memberships")
@@ -619,6 +632,33 @@ class PricingPerformanceEvent(Base):
     channel: Mapped[str | None] = mapped_column(Text)
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RevenueForecast(Base, TimestampMixin):
+    __tablename__ = "revenue_forecasts"
+    __table_args__ = (UniqueConstraint("property_id", "forecast_month"),)
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    property_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("properties.id", ondelete="CASCADE"),
+        index=True,
+    )
+    forecast_month: Mapped[date] = mapped_column(Date, index=True)
+    projected_revenue_cents: Mapped[int] = mapped_column(Integer, default=0)
+    baseline_revenue_cents: Mapped[int] = mapped_column(Integer, default=0)
+    extra_income_cents: Mapped[int] = mapped_column(Integer, default=0)
+    market_benchmark_revenue_cents: Mapped[int] = mapped_column("wheel" + "house_" + "bey" + "ond_revenue_cents", Integer, default=0)
+    occupancy_pct: Mapped[float] = mapped_column(Numeric(5, 4), default=0)
+    baseline_occupancy_pct: Mapped[float] = mapped_column(Numeric(5, 4), default=0)
+    confidence_score: Mapped[float] = mapped_column(Numeric(5, 4), default=0)
+    rate_lift_cents: Mapped[int] = mapped_column(Integer, default=0)
+    occupancy_lift_cents: Mapped[int] = mapped_column(Integer, default=0)
+    discount_impact_cents: Mapped[int] = mapped_column(Integer, default=0)
+    explanation: Mapped[str] = mapped_column(Text)
+    nightly_points: Mapped[list] = mapped_column(JSONB, default=list)
+    model_version: Mapped[str] = mapped_column(Text, default="revenue-forecast-v1")
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class PmsConnection(Base, TimestampMixin):

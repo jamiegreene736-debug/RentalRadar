@@ -131,8 +131,18 @@ model Organization {
 model AppUser {
   id                     String                  @id @default(uuid()) @db.Uuid
   email                  String                  @unique @db.Citext
+  firstName              String?                 @map("first_name")
+  lastName               String?                 @map("last_name")
   fullName               String?                 @map("full_name")
   avatarUrl              String?                 @map("avatar_url")
+  phoneNumber            String?                 @map("phone_number")
+  companyName            String?                 @map("company_name")
+  jobTitle               String?                 @map("job_title")
+  timezone               String                  @default("America/New_York")
+  locale                 String                  @default("en-US")
+  notificationEmail      String?                 @map("notification_email") @db.Citext
+  marketingOptIn         Boolean                 @default(false) @map("marketing_opt_in")
+  profileCompletedAt     DateTime?               @map("profile_completed_at") @db.Timestamptz(6)
   clerkUserId            String?                 @unique @map("clerk_user_id")
   supabaseAuthUserId     String?                 @unique @map("supabase_auth_user_id") @db.Uuid
   defaultOrganizationId  String?                 @map("default_organization_id") @db.Uuid

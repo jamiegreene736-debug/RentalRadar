@@ -21,10 +21,16 @@ from app.deps import RequestContext, get_request_context
 from app.schemas import (
     AddressPropertyCreate,
     AddressSuggestionResponse,
+    BaseRateModelResponse,
     CancelMarketScanResponse,
     MarketRatesResponse,
+    MarketSourceEvidenceResponse,
     MonthlyRateForecastResponse,
+    PricingAdjustmentLayerResponse,
+    PricingControlsResponse,
+    PricingControlsUpdate,
     PricingRecommendationResponse,
+    PricingToolCoverageResponse,
     PropertyResponse,
     RateForecastNightResponse,
     RateForecastResponse,
@@ -32,6 +38,9 @@ from app.schemas import (
     ScrapeSessionEventResponse,
     ScrapeSessionResponse,
     ScrapeSessionsResponse,
+    SeasonBandResponse,
+    SeasonCalendarResponse,
+    HolidayWindowResponse,
     BrowserEvidenceResponse,
     MarketScanResponse,
     TargetOccupancyNightResponse,
@@ -48,12 +57,24 @@ from app.services.market import (
     get_market_rates,
     infer_source,
 )
+from app.services.pricing_controls import apply_pricing_control_update, pricing_controls_for_property
+from app.services.season_calendar import month_names, season_profile_for_property
 from app.services.usage import BillingRequired, UsageLimitExceeded, ensure_property_allowed, require_usage_allowance
 from app.workers.tasks import run_scrape_job
 
 router = APIRouter(tags=["properties"])
 
 STALE_RUNNING_SECONDS = 180
+NOISY_BROWSER_HOSTS = {
+    "browser-intake-datadoghq.com",
+    "bat.bing.com",
+    "www.google-analytics.com",
+    "www.googletagmanager.com",
+}
+NOISY_BROWSER_PATH_PREFIXES = (
+    "/api/v2/rum",
+    "/api/uisprime/track",
+)
 
 
 @router.get("/address-suggestions", response_model=list[AddressSuggestionResponse])
@@ -328,20 +349,76 @@ def rate_forecast(
         generated_at=forecast.generated_at,
         estimated_occupancy=forecast.estimated_occupancy,
         recommended_total_revenue_cents=forecast.recommended_total_revenue_cents,
-        beyond_pricing_total_revenue_cents=forecast.beyond_pricing_total_revenue_cents,
-        extra_income_vs_beyond_cents=forecast.extra_income_vs_beyond_cents,
+        market_benchmark_total_revenue_cents=forecast.market_benchmark_total_revenue_cents,
+        extra_income_vs_market_cents=forecast.extra_income_vs_market_cents,
         confidence=forecast.confidence,
         explanation=forecast.explanation,
+        base_rate_model=BaseRateModelResponse(
+            method=forecast.base_rate_model.method,
+            base_rate_cents=forecast.base_rate_model.base_rate_cents,
+            market_median_rate_cents=forecast.base_rate_model.market_median_rate_cents,
+            market_average_rate_cents=forecast.base_rate_model.market_average_rate_cents,
+            sample_size=forecast.base_rate_model.sample_size,
+            source_count=forecast.base_rate_model.source_count,
+            booked_rate_feed=forecast.base_rate_model.booked_rate_feed,
+            explanation=forecast.base_rate_model.explanation,
+        ),
+        market_sources=[
+            MarketSourceEvidenceResponse(
+                source=source.source,
+                label=source.label,
+                role=source.role,
+                status=source.status,
+                sample_count=source.sample_count,
+                median_rate_cents=source.median_rate_cents,
+                average_rate_cents=source.average_rate_cents,
+                low_rate_cents=source.low_rate_cents,
+                high_rate_cents=source.high_rate_cents,
+                confidence=source.confidence,
+                last_observed_at=source.last_observed_at,
+                note=source.note,
+            )
+            for source in forecast.market_sources
+        ],
+        adjustment_layers=[
+            PricingAdjustmentLayerResponse(
+                code=layer.code,
+                label=layer.label,
+                category=layer.category,
+                data_feed=layer.data_feed,
+                adjustment_percent=layer.adjustment_percent,
+                rate_impact_cents=layer.rate_impact_cents,
+                confidence=layer.confidence,
+                status=layer.status,
+                description=layer.description,
+            )
+            for layer in forecast.adjustment_layers
+        ],
+        pricing_tools=[
+            PricingToolCoverageResponse(
+                code=tool.code,
+                label=tool.label,
+                category=tool.category,
+                status=tool.status,
+                priority=tool.priority,
+                current_value=tool.current_value,
+                recommended_value=tool.recommended_value,
+                control_references=tool.control_references,
+                data_needed=tool.data_needed,
+                description=tool.description,
+            )
+            for tool in forecast.pricing_tools
+        ],
         monthly=[
             MonthlyRateForecastResponse(
                 month=month.month,
                 average_recommended_rate_cents=month.average_recommended_rate_cents,
-                average_beyond_pricing_rate_cents=month.average_beyond_pricing_rate_cents,
-                average_wheelhouse_style_rate_cents=month.average_wheelhouse_style_rate_cents,
+                average_market_benchmark_rate_cents=month.average_market_benchmark_rate_cents,
+                average_comp_blend_rate_cents=month.average_comp_blend_rate_cents,
                 estimated_occupancy=month.estimated_occupancy,
                 estimated_revenue_cents=month.estimated_revenue_cents,
-                beyond_pricing_revenue_cents=month.beyond_pricing_revenue_cents,
-                extra_income_vs_beyond_cents=month.extra_income_vs_beyond_cents,
+                market_benchmark_revenue_cents=month.market_benchmark_revenue_cents,
+                extra_income_vs_market_cents=month.extra_income_vs_market_cents,
             )
             for month in forecast.monthly
         ],
@@ -349,14 +426,78 @@ def rate_forecast(
             RateForecastNightResponse(
                 stay_date=night.stay_date,
                 recommended_rate_cents=night.recommended_rate_cents,
-                beyond_pricing_rate_cents=night.beyond_pricing_rate_cents,
-                wheelhouse_style_rate_cents=night.wheelhouse_style_rate_cents,
+                market_benchmark_rate_cents=night.market_benchmark_rate_cents,
+                comp_blend_rate_cents=night.comp_blend_rate_cents,
                 estimated_occupancy=night.estimated_occupancy,
                 estimated_revenue_cents=night.estimated_revenue_cents,
                 confidence=night.confidence,
             )
             for night in forecast.nights
         ],
+    )
+
+
+@router.get("/properties/{property_id}/pricing-controls", response_model=PricingControlsResponse)
+def get_pricing_controls(
+    property_id: UUID,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> PricingControlsResponse:
+    rental = _active_property(db, property_id, context.organization_id)
+    controls = pricing_controls_for_property(rental)
+    return PricingControlsResponse(property_id=property_id, **controls)
+
+
+@router.patch("/properties/{property_id}/pricing-controls", response_model=PricingControlsResponse)
+def update_pricing_controls(
+    property_id: UUID,
+    payload: PricingControlsUpdate,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> PricingControlsResponse:
+    rental = _active_property(db, property_id, context.organization_id)
+    try:
+        apply_pricing_control_update(rental, payload.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    db.add(rental)
+    db.commit()
+    db.refresh(rental)
+    try:
+        JsonCache().delete(f"market-rates:{property_id}")
+    except Exception:
+        pass
+    return PricingControlsResponse(property_id=property_id, **pricing_controls_for_property(rental))
+
+
+@router.get("/properties/{property_id}/season-calendar", response_model=SeasonCalendarResponse)
+def get_season_calendar(
+    property_id: UUID,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> SeasonCalendarResponse:
+    rental = _active_property(db, property_id, context.organization_id)
+    profile = season_profile_for_property(rental)
+    return SeasonCalendarResponse(
+        property_id=profile.property_id,
+        market_key=profile.market_key,
+        market_label=profile.market_label,
+        basis=profile.basis,
+        current_model_note=profile.current_model_note,
+        seasons=[
+            SeasonBandResponse(
+                code=season.code,
+                label=season.label,
+                months=season.months,
+                month_labels=month_names(season.months),
+                multiplier=season.multiplier,
+                minimum_stay_nights=season.minimum_stay_nights,
+                booking_posture=season.booking_posture,
+                notes=season.notes,
+            )
+            for season in profile.seasons
+        ],
+        holidays=[HolidayWindowResponse(**holiday.__dict__) for holiday in profile.holidays],
     )
 
 
@@ -674,6 +815,18 @@ def _recover_stale_running_jobs(db: Session, property_id: UUID, organization_id:
         run_scrape_job.delay(str(job_id))
 
 
+def _active_property(db: Session, property_id: UUID, organization_id: UUID) -> Property:
+    rental = db.scalar(
+        select(Property)
+        .where(Property.id == property_id)
+        .where(Property.organization_id == organization_id)
+        .where(Property.active.is_(True))
+    )
+    if rental is None:
+        raise HTTPException(status_code=404, detail="Property not found")
+    return rental
+
+
 def _float_or_none(value: Decimal | float | None) -> float | None:
     if value is None:
         return None
@@ -698,7 +851,7 @@ def _scrape_session_response(db: Session, job: ScrapeJob, queue_position: int | 
         key=lambda item: item.at,
         reverse=True,
     )[:18]
-    current_url = next((event.url for event in merged_events if event.url), None)
+    current_url = _current_page_url(job.target_url, merged_events)
     latest_screenshot_data_url = _latest_screenshot_data_url(job)
     return ScrapeSessionResponse(
         id=job.id,
@@ -816,18 +969,22 @@ def _db_scrape_events(db: Session, job_id: UUID) -> list[ScrapeSessionEventRespo
         .order_by(desc(ScrapeJobLog.created_at))
         .limit(10)
     ).all()
-    return [
-        ScrapeSessionEventResponse(
-            at=log.created_at,
-            event=log.event,
-            level=log.level,
-            message=log.message,
-            url=_safe_url(str(log.payload.get("url"))) if isinstance(log.payload, dict) and log.payload.get("url") else None,
-            status=log.payload.get("status") if isinstance(log.payload, dict) and isinstance(log.payload.get("status"), int) else None,
-            payload=_safe_payload(log.payload) if isinstance(log.payload, dict) else None,
+    events: list[ScrapeSessionEventResponse] = []
+    for log in logs:
+        payload = log.payload if isinstance(log.payload, dict) else {}
+        payload_url = payload.get("url") or payload.get("current_url")
+        events.append(
+            ScrapeSessionEventResponse(
+                at=log.created_at,
+                event=log.event,
+                level=log.level,
+                message=log.message,
+                url=_safe_url(str(payload_url)) if payload_url else None,
+                status=payload.get("status") if isinstance(payload.get("status"), int) else None,
+                payload=_safe_payload(payload) if payload else None,
+            )
         )
-        for log in logs
-    ]
+    return events
 
 
 def _browser_action_events(job_id: str) -> list[ScrapeSessionEventResponse]:
@@ -911,6 +1068,34 @@ def _event_level(event: str) -> str:
     if event in {"scrape.blocker_detected", "scrape.proxy_tls_error", "scrape.rates_missing", "scrape.selector_missing", "scrape.canceled", "scrape.needs_review"}:
         return "warning"
     return "info"
+
+
+def _current_page_url(target_url: str, events: list[ScrapeSessionEventResponse]) -> str | None:
+    for event in events:
+        if event.url and _looks_like_page_url(event.url, target_url):
+            return event.url
+    return None
+
+
+def _looks_like_page_url(url: str, target_url: str) -> bool:
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return False
+
+    host = parsed.netloc.lower()
+    if host in NOISY_BROWSER_HOSTS:
+        return False
+    if parsed.path.startswith(NOISY_BROWSER_PATH_PREFIXES):
+        return False
+
+    target_host = urlsplit(target_url).netloc.lower()
+    if target_host and host != target_host:
+        return _without_www(host) == _without_www(target_host)
+    return True
+
+
+def _without_www(host: str) -> str:
+    return host[4:] if host.startswith("www.") else host
 
 
 def _latest_screenshot_data_url(job: ScrapeJob) -> str | None:

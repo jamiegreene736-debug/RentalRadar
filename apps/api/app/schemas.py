@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 from app.db.models import OtaDirectPlatform, OtaDirectStatus, PmsProvider, ScrapeSource
 
@@ -173,8 +173,8 @@ class ScrapeSessionsResponse(BaseModel):
 class RateForecastNightResponse(BaseModel):
     stay_date: date
     recommended_rate_cents: int
-    beyond_pricing_rate_cents: int
-    wheelhouse_style_rate_cents: int
+    market_benchmark_rate_cents: int
+    comp_blend_rate_cents: int
     estimated_occupancy: float
     estimated_revenue_cents: int
     confidence: float
@@ -183,12 +183,151 @@ class RateForecastNightResponse(BaseModel):
 class MonthlyRateForecastResponse(BaseModel):
     month: date
     average_recommended_rate_cents: int
-    average_beyond_pricing_rate_cents: int
-    average_wheelhouse_style_rate_cents: int
+    average_market_benchmark_rate_cents: int
+    average_comp_blend_rate_cents: int
     estimated_occupancy: float
     estimated_revenue_cents: int
-    beyond_pricing_revenue_cents: int
-    extra_income_vs_beyond_cents: int
+    market_benchmark_revenue_cents: int
+    extra_income_vs_market_cents: int
+
+
+class MarketSourceEvidenceResponse(BaseModel):
+    source: str
+    label: str
+    role: str
+    status: str
+    sample_count: int
+    median_rate_cents: int | None = None
+    average_rate_cents: int | None = None
+    low_rate_cents: int | None = None
+    high_rate_cents: int | None = None
+    confidence: float
+    last_observed_at: datetime | None = None
+    note: str
+
+
+class BaseRateModelResponse(BaseModel):
+    method: str
+    base_rate_cents: int
+    market_median_rate_cents: int | None = None
+    market_average_rate_cents: int | None = None
+    sample_size: int
+    source_count: int
+    booked_rate_feed: str
+    explanation: str
+
+
+class PricingAdjustmentLayerResponse(BaseModel):
+    code: str
+    label: str
+    category: str
+    data_feed: str
+    adjustment_percent: float
+    rate_impact_cents: int
+    confidence: float
+    status: str
+    description: str
+
+
+class PricingToolCoverageResponse(BaseModel):
+    code: str
+    label: str
+    category: str
+    status: str
+    priority: str
+    current_value: str
+    recommended_value: str
+    control_references: list[str]
+    data_needed: str
+    description: str
+
+
+class PricingControlsResponse(BaseModel):
+    property_id: UUID
+    base_price_cents: int | None = None
+    min_price_cents: int | None = None
+    max_price_cents: int | None = None
+    absolute_min_price_cents: int | None = None
+    global_min_stay: int
+    weekday_min_stay: int
+    weekend_min_stay: int
+    gap_night_min_stay: int
+    gap_night_discount_percent: float
+    last_minute_window_days: int
+    last_minute_discount_percent: float
+    far_future_window_days: int
+    far_future_premium_percent: float
+    orphan_gap_enabled: bool
+    seasonal_rules_enabled: bool
+    event_rules_enabled: bool
+    pacing_adjustments_enabled: bool
+    review_adjustments_enabled: bool
+    availability_yielding_enabled: bool
+    channel_fee_preview_enabled: bool
+
+
+class PricingControlsUpdate(BaseModel):
+    base_price_cents: int | None = Field(default=None, ge=0)
+    min_price_cents: int | None = Field(default=None, ge=0)
+    max_price_cents: int | None = Field(default=None, ge=0)
+    absolute_min_price_cents: int | None = Field(default=None, ge=0)
+    global_min_stay: int | None = Field(default=None, ge=1, le=60)
+    weekday_min_stay: int | None = Field(default=None, ge=1, le=60)
+    weekend_min_stay: int | None = Field(default=None, ge=1, le=60)
+    gap_night_min_stay: int | None = Field(default=None, ge=1, le=14)
+    gap_night_discount_percent: float | None = Field(default=None, ge=0, le=80)
+    last_minute_window_days: int | None = Field(default=None, ge=0, le=120)
+    last_minute_discount_percent: float | None = Field(default=None, ge=0, le=80)
+    far_future_window_days: int | None = Field(default=None, ge=0, le=730)
+    far_future_premium_percent: float | None = Field(default=None, ge=0, le=80)
+    orphan_gap_enabled: bool | None = None
+    seasonal_rules_enabled: bool | None = None
+    event_rules_enabled: bool | None = None
+    pacing_adjustments_enabled: bool | None = None
+    review_adjustments_enabled: bool | None = None
+    availability_yielding_enabled: bool | None = None
+    channel_fee_preview_enabled: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_price_bounds(self) -> "PricingControlsUpdate":
+        if self.min_price_cents is not None and self.max_price_cents is not None and self.max_price_cents < self.min_price_cents:
+            raise ValueError("max_price_cents must be >= min_price_cents")
+        if (
+            self.absolute_min_price_cents is not None
+            and self.min_price_cents is not None
+            and self.absolute_min_price_cents > self.min_price_cents
+        ):
+            raise ValueError("absolute_min_price_cents must be <= min_price_cents")
+        return self
+
+
+class SeasonBandResponse(BaseModel):
+    code: str
+    label: str
+    months: list[int]
+    month_labels: list[str]
+    multiplier: float
+    minimum_stay_nights: int
+    booking_posture: str
+    notes: str
+
+
+class HolidayWindowResponse(BaseModel):
+    label: str
+    date_window: str
+    multiplier: float
+    minimum_stay_nights: int
+    notes: str
+
+
+class SeasonCalendarResponse(BaseModel):
+    property_id: UUID
+    market_key: str
+    market_label: str
+    basis: str
+    current_model_note: str
+    seasons: list[SeasonBandResponse]
+    holidays: list[HolidayWindowResponse]
 
 
 class RateForecastResponse(BaseModel):
@@ -199,10 +338,14 @@ class RateForecastResponse(BaseModel):
     generated_at: datetime
     estimated_occupancy: float
     recommended_total_revenue_cents: int
-    beyond_pricing_total_revenue_cents: int
-    extra_income_vs_beyond_cents: int
+    market_benchmark_total_revenue_cents: int
+    extra_income_vs_market_cents: int
     confidence: float
     explanation: str
+    base_rate_model: BaseRateModelResponse
+    market_sources: list[MarketSourceEvidenceResponse]
+    adjustment_layers: list[PricingAdjustmentLayerResponse]
+    pricing_tools: list[PricingToolCoverageResponse]
     monthly: list[MonthlyRateForecastResponse]
     nights: list[RateForecastNightResponse]
 

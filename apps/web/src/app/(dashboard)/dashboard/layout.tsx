@@ -22,7 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <header className="sticky top-0 z-40 border-b border-cyan-900/10 bg-white/78 backdrop-blur-xl">
             <div className="flex min-h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
               <div className="flex min-w-0 items-center gap-3">
-                <Link href="/dashboard" className="lg:hidden">
+                <Link href="/dashboard/properties" className="lg:hidden">
                   <BrandLogo showText={false} markClassName="h-10 w-14" />
                 </Link>
                 <div className="min-w-0">

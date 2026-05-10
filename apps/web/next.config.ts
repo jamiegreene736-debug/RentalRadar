@@ -38,8 +38,8 @@ type WebpackConfig = {
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(process.cwd(), "../.."),
-  webpack(config: WebpackConfig, { isServer, webpack }: { isServer: boolean; webpack: WebpackRuntime }) {
-    if (isServer) {
+  webpack(config: WebpackConfig, { dev, isServer, webpack }: { dev: boolean; isServer: boolean; webpack: WebpackRuntime }) {
+    if (isServer && !dev) {
       config.plugins = config.plugins ?? [];
       const ensurePagesManifestPlugin: WebpackPlugin = {
         apply(compiler) {

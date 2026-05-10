@@ -110,13 +110,15 @@ class ProxyRotator:
     def _lease_from_brightdata(self, job_id: str | None) -> ProxyLease | None:
         if not self.settings.brightdata_proxy_server:
             return None
-        username = self.settings.brightdata_proxy_username
+        lease = _lease_from_proxy_url(self.settings.brightdata_proxy_server, provider="brightdata")
+        username = self.settings.brightdata_proxy_username or lease.username
+        password = self.settings.brightdata_proxy_password or lease.password
         if username and "{session}" in username:
             username = username.replace("{session}", _session_token(job_id))
         return ProxyLease(
-            server=self.settings.brightdata_proxy_server,
+            server=lease.server,
             username=username,
-            password=self.settings.brightdata_proxy_password,
+            password=password,
             provider="brightdata",
             sticky_session_id=_session_token(job_id),
         )

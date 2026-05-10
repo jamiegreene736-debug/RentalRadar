@@ -3,15 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Activity, Bot, Building2, ChevronLeft, LayoutDashboard, PlugZap, UserCircle } from "lucide-react";
+import { Activity, Bot, Building2, CalendarRange, ChevronLeft, Chrome, Database, Layers3, Percent, PlugZap, SlidersHorizontal, Target, UserCircle } from "lucide-react";
 import { useState } from "react";
 
 import { BrandLogo } from "@/components/brand-logo";
 import { cn } from "@/lib/utils";
 
 const nav = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/dashboard/properties", label: "Property Detail", icon: Building2 },
+  { href: "/dashboard/properties", label: "Saved Properties", icon: Building2 },
+  { href: "/dashboard/suggested-rates", label: "Suggested Rates", icon: Percent },
+  { href: "/dashboard/rate-stack", label: "Rate Stack", icon: Layers3 },
+  { href: "/dashboard/season-calendar", label: "Season Calendar", icon: CalendarRange },
+  { href: "/dashboard/market-evidence", label: "Market Evidence", icon: Database },
+  { href: "/dashboard/occupancy-planner", label: "Occupancy Planner", icon: Target },
+  { href: "/dashboard/pricing-controls", label: "Pricing Controls", icon: SlidersHorizontal },
+  { href: "/dashboard/queued-scans", label: "Queued Scans", icon: Chrome },
   { href: "/dashboard/connections", label: "Connections", icon: PlugZap },
   { href: "/dashboard/ai-log", label: "AI Scraping Log", icon: Bot },
   { href: "/dashboard/account", label: "Account", icon: UserCircle },
@@ -25,10 +31,10 @@ export function DashboardSidebar() {
     <motion.aside
       initial={false}
       animate={{ width: collapsed ? 88 : 280 }}
-      className="sticky top-0 hidden h-screen shrink-0 border-r border-cyan-900/10 bg-white/82 px-4 py-5 backdrop-blur-xl lg:block"
+      className="sticky top-0 hidden h-screen shrink-0 flex-col border-r border-cyan-900/10 bg-white/82 px-4 py-5 backdrop-blur-xl lg:flex"
     >
       <div className="flex items-center justify-between">
-        <Link href="/dashboard" className="flex items-center gap-3">
+        <Link href="/dashboard/properties" className="flex items-center gap-3">
           <BrandLogo
             markClassName="h-11 w-16"
             showText={!collapsed}
@@ -45,9 +51,9 @@ export function DashboardSidebar() {
         </button>
       </div>
 
-      <nav className="mt-10 space-y-2">
+      <nav className="mt-8 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
         {nav.map((item) => {
-          const active = item.href === "/dashboard/properties" ? pathname.startsWith("/dashboard/properties") : pathname === item.href;
+          const active = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
@@ -66,7 +72,7 @@ export function DashboardSidebar() {
         })}
       </nav>
 
-      <div className="absolute bottom-5 left-4 right-4 rounded-3xl border border-cyan-900/10 bg-white/78 p-4">
+      <div className="mt-5 rounded-3xl border border-cyan-900/10 bg-white/78 p-4">
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-2xl bg-cyan-100 text-cyan-800">
             <Activity className="size-5" />
@@ -92,14 +98,14 @@ export function DashboardSidebar() {
 export function MobileDashboardNav() {
   const pathname = usePathname() ?? "";
   return (
-    <div className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-5 rounded-3xl border border-cyan-900/10 bg-white/90 p-2 shadow-[0_20px_70px_rgba(14,116,144,0.18)] backdrop-blur-xl lg:hidden">
+    <div className="fixed inset-x-3 bottom-3 z-50 flex gap-1 overflow-x-auto rounded-3xl border border-cyan-900/10 bg-white/90 p-2 shadow-[0_20px_70px_rgba(14,116,144,0.18)] backdrop-blur-xl lg:hidden">
       {nav.map((item) => {
-        const active = pathname === item.href;
+        const active = pathname.startsWith(item.href);
         return (
           <Link
             key={item.href}
             href={item.href}
-            className={cn("grid place-items-center rounded-2xl py-2 text-xs", active ? "bg-cyan-300 text-slate-950" : "text-slate-600")}
+            className={cn("grid min-w-20 place-items-center rounded-2xl px-2 py-2 text-xs", active ? "bg-cyan-300 text-slate-950" : "text-slate-600")}
           >
             <item.icon className="mb-1 size-4" />
             {item.label.split(" ")[0]}
