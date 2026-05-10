@@ -26,7 +26,8 @@ class PlaywrightTrainerAgent:
                 {"action": "goto", "url": "{{target_url}}", "wait_until": "domcontentloaded"},
                 {
                     "action": "wait_for_any",
-                    "selectors": selectors["candidate_calendar_selectors"]
+                    "selectors": selectors.get("candidate_result_selectors", [])
+                    + selectors["candidate_calendar_selectors"]
                     + selectors["candidate_price_selectors"],
                     "timeout_ms": 15000,
                 },
@@ -34,6 +35,7 @@ class PlaywrightTrainerAgent:
                     "action": "extract_rates",
                     "price_selectors": selectors["candidate_price_selectors"],
                     "calendar_selectors": selectors["candidate_calendar_selectors"],
+                    "result_selectors": selectors.get("candidate_result_selectors", []),
                 },
             ],
             "validators": {

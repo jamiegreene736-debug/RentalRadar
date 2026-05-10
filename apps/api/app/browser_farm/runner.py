@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import date
+import re
+from datetime import date, timedelta
 from typing import Any
 
 from app.agents.types import ExtractedRate, ScrapeExecutionResult, ScrapeTarget, ScraperStrategyPlan
@@ -102,6 +103,11 @@ async def execute_generated_scraper_code(
 async def _execute_strategy_steps(page: Any, target: ScrapeTarget, strategy: ScraperStrategyPlan) -> dict[str, Any]:
     diagnostics: dict[str, Any] = {"mode": "json_strategy"}
     await page.goto(target.url, wait_until="domcontentloaded", timeout=60_000)
+    try:
+        await page.wait_for_load_state("networkidle", timeout=10_000)
+    except Exception:
+        pass
+    await page.wait_for_timeout(1_500)
     action_logger = getattr(page, "_rentalradar_action_logger", None)
     if action_logger:
         await action_logger.screenshot(page, "scrape.page_loaded")
@@ -151,14 +157,28 @@ async def _execute_strategy_steps(page: Any, target: ScrapeTarget, strategy: Scr
         )
         await action_logger.screenshot(page, "scrape.selector_missing")
 
+    rates = await _extract_rates_from_page(page, target, strategy)
+    diagnostics["rates_extracted"] = len(rates)
+    if not rates and action_logger:
+        action_logger.write(
+            "scrape.rates_missing",
+            {
+                "message": "Chrome loaded the OTA page but RentalRadar could not extract any prices from the visible result cards.",
+                "url": page.url,
+                "matched_selector": diagnostics.get("matched_selector"),
+            },
+        )
+
     # The trained extractor is expected to replace this generic rate parser.
+    confidence = 0.74 if rates else 0.48 if diagnostics.get("matched_selector") else 0.32
     return {
-        "rates": [],
-        "confidence": 0.64 if diagnostics.get("matched_selector") else 0.42,
+        "rates": rates,
+        "confidence": confidence,
         "diagnostics": diagnostics,
         "dom_fingerprint": diagnostics["html_sha256"][:16],
         "raw_html_url": f"memory://{diagnostics['html_sha256']}",
-}
+        "error_message": None if rates else "No visible OTA prices were extracted from the loaded page.",
+    }
 
 
 async def _detect_browser_blocker(page: Any, html: str) -> dict[str, Any] | None:
@@ -192,6 +212,90 @@ async def _detect_browser_blocker(page: Any, html: str) -> dict[str, Any] | None
                 "title": title,
             }
     return None
+
+
+async def _extract_rates_from_page(page: Any, target: ScrapeTarget, strategy: ScraperStrategyPlan) -> list[dict[str, Any]]:
+    selectors = _price_selectors(strategy)
+    seen: set[int] = set()
+    extracted: list[dict[str, Any]] = []
+    stay_nights = max(1, (target.stay_date_end - target.stay_date_start).days + 1)
+    validators = strategy.strategy_json.get("validators", {})
+    min_cents = int(validators.get("nightly_rate_min_cents", 2000))
+    max_cents = int(validators.get("nightly_rate_max_cents", 500000))
+
+    for selector in selectors:
+        try:
+            locator = page.locator(selector)
+            count = min(await locator.count(), 12)
+        except Exception:
+            continue
+        for index in range(count):
+            try:
+                text = await locator.nth(index).inner_text(timeout=1_500)
+            except Exception:
+                continue
+            price_cents = _price_cents_from_text(text)
+            if price_cents is None or price_cents in seen:
+                continue
+            seen.add(price_cents)
+            lower = text.lower()
+            looks_nightly = any(marker in lower for marker in ("per night", "/night", "nightly"))
+            total_rate_cents = None if looks_nightly else price_cents
+            nightly_rate_cents = price_cents if looks_nightly else max(1, round(price_cents / stay_nights))
+            if nightly_rate_cents < min_cents or nightly_rate_cents > max_cents:
+                continue
+            for offset in range(stay_nights):
+                extracted.append(
+                    {
+                        "stay_date": (target.stay_date_start + timedelta(days=offset)).isoformat(),
+                        "nightly_rate_cents": nightly_rate_cents,
+                        "total_rate_cents": total_rate_cents if offset == 0 else None,
+                        "available": True,
+                        "min_nights": stay_nights,
+                        "raw_payload": {
+                            "source": target.source.value,
+                            "selector": selector,
+                            "text": text[:500],
+                            "assumed_total_rate": not looks_nightly,
+                        },
+                    }
+                )
+            if len(extracted) >= 28:
+                return extracted[:28]
+
+    return extracted[:28]
+
+
+def _price_selectors(strategy: ScraperStrategyPlan) -> list[str]:
+    selectors: list[str] = []
+    for step in strategy.strategy_json.get("steps", []):
+        if step.get("action") == "extract_rates":
+            selectors.extend(step.get("price_selectors", []))
+            for result_selector in step.get("result_selectors", []):
+                selectors.append(f"{result_selector} [data-testid*='price' i]")
+                selectors.append(f"{result_selector} [class*='price' i]")
+    selectors.extend(
+        [
+            "[data-testid='price-and-discounted-price']",
+            "[data-testid='price-availability-row']",
+            "[data-stid*='price' i]",
+            "[aria-label*='price' i]",
+            "[aria-label*='total' i]",
+            "[class*='price' i]",
+        ]
+    )
+    return list(dict.fromkeys(selectors))
+
+
+def _price_cents_from_text(text: str) -> int | None:
+    normalized = " ".join(text.split())
+    matches = re.findall(r"(?:US\$|\$)\s*([0-9][0-9,]*(?:\.\d{2})?)", normalized)
+    if not matches:
+        matches = re.findall(r"([0-9][0-9,]*(?:\.\d{2})?)\s*(?:USD|US dollars)", normalized, flags=re.IGNORECASE)
+    if not matches:
+        return None
+    values = [int(float(match.replace(",", "")) * 100) for match in matches]
+    return max(values)
 
 
 def _to_execution_result(

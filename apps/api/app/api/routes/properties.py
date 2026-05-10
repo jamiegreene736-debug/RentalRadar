@@ -799,6 +799,7 @@ def _has_browser_evidence(
         "scrape.page_loaded",
         "scrape.live_screenshot",
         "scrape.proxy_tls_error",
+        "scrape.rates_missing",
         "scrape.selector_missing",
         "scrape.screenshot",
         "scrape.completed",
@@ -893,6 +894,8 @@ def _event_message(event: str, payload: dict[str, Any]) -> str | None:
         return str(payload.get("message") or "Playwright raised an exception")
     if event == "scrape.proxy_tls_error":
         return str(payload.get("message") or "Residential proxy certificate was rejected")
+    if event == "scrape.rates_missing":
+        return str(payload.get("message") or "No visible OTA prices were extracted")
     if event == "scrape.completed":
         return "Extraction run finished"
     if event == "browser.shutdown":
@@ -905,7 +908,7 @@ def _event_message(event: str, payload: dict[str, Any]) -> str | None:
 def _event_level(event: str) -> str:
     if event in {"scrape.exception", "pageerror"} or event.endswith("failed"):
         return "error"
-    if event in {"scrape.blocker_detected", "scrape.proxy_tls_error", "scrape.selector_missing", "scrape.canceled", "scrape.needs_review"}:
+    if event in {"scrape.blocker_detected", "scrape.proxy_tls_error", "scrape.rates_missing", "scrape.selector_missing", "scrape.canceled", "scrape.needs_review"}:
         return "warning"
     return "info"
 
@@ -924,7 +927,7 @@ def _latest_screenshot_data_url(job: ScrapeJob) -> str | None:
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if record.get("event") not in {"scrape.page_loaded", "scrape.live_screenshot", "scrape.screenshot", "scrape.blocker_detected", "scrape.exception", "scrape.proxy_tls_error", "scrape.selector_missing"}:
+        if record.get("event") not in {"scrape.page_loaded", "scrape.live_screenshot", "scrape.screenshot", "scrape.blocker_detected", "scrape.exception", "scrape.proxy_tls_error", "scrape.rates_missing", "scrape.selector_missing"}:
             continue
         payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
         screenshot_path = payload.get("screenshot_path")

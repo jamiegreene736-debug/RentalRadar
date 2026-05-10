@@ -4,6 +4,7 @@ import hashlib
 from urllib.parse import urlparse
 
 from app.agents.types import ScrapeTarget, SiteAnalysis
+from app.db.models import ScrapeSource
 
 
 class SiteAnalyzerAgent:
@@ -19,22 +20,14 @@ class SiteAnalyzerAgent:
         dom_text = html or parsed.netloc + parsed.path
         fingerprint = hashlib.sha256(f"{target.source.value}:{dom_text[:5000]}".encode()).hexdigest()[:16]
         lower = dom_text.lower()
+        selectors = _selectors_for_source(target.source)
         dom_summary = {
             "domain": parsed.netloc,
             "has_calendar_terms": any(term in lower for term in ["calendar", "date", "availability"]),
             "has_price_terms": any(term in lower for term in ["price", "rate", "$", "night"]),
-            "candidate_price_selectors": [
-                "[data-testid*='price']",
-                "[aria-label*='price' i]",
-                ".price",
-                ".rate",
-            ],
-            "candidate_calendar_selectors": [
-                "[data-testid*='calendar']",
-                "[aria-label*='calendar' i]",
-                ".calendar",
-                ".date-picker",
-            ],
+            "candidate_price_selectors": selectors["price"],
+            "candidate_calendar_selectors": selectors["calendar"],
+            "candidate_result_selectors": selectors["results"],
         }
         return SiteAnalysis(
             url=target.url,
@@ -44,3 +37,64 @@ class SiteAnalyzerAgent:
             layout_fingerprint=fingerprint,
             confidence=0.72,
         )
+
+
+def _selectors_for_source(source: ScrapeSource) -> dict[str, list[str]]:
+    common_price = [
+        "[data-testid*='price' i]",
+        "[aria-label*='price' i]",
+        "[class*='price' i]",
+        "[class*='rate' i]",
+    ]
+    common_calendar = [
+        "[data-testid*='calendar' i]",
+        "[aria-label*='calendar' i]",
+        "[class*='calendar' i]",
+        "[class*='date-picker' i]",
+    ]
+    if source == ScrapeSource.booking:
+        return {
+            "price": [
+                "[data-testid='price-and-discounted-price']",
+                "[data-testid='availability-rate-information']",
+                "[data-testid='property-card'] [data-testid*='price' i]",
+                *common_price,
+            ],
+            "calendar": common_calendar,
+            "results": [
+                "[data-testid='property-card']",
+                "[data-testid='searchresults']",
+                "#search_results_table",
+            ],
+        }
+    if source == ScrapeSource.airbnb:
+        return {
+            "price": [
+                "[data-testid='price-availability-row']",
+                "[data-testid*='price' i]",
+                "[aria-label*='total' i]",
+                *common_price,
+            ],
+            "calendar": common_calendar,
+            "results": [
+                "[data-testid='card-container']",
+                "[itemprop='itemListElement']",
+                "[data-testid*='listing' i]",
+            ],
+        }
+    if source == ScrapeSource.vrbo:
+        return {
+            "price": [
+                "[data-stid*='price' i]",
+                "[data-testid*='price' i]",
+                "[aria-label*='price' i]",
+                *common_price,
+            ],
+            "calendar": common_calendar,
+            "results": [
+                "[data-stid='property-listing']",
+                "[data-testid*='property' i]",
+                "[class*='listing' i]",
+            ],
+        }
+    return {"price": common_price, "calendar": common_calendar, "results": []}
