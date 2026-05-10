@@ -26,6 +26,8 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
   const [cancelStatus, setCancelStatus] = useState<"idle" | "stopping" | "stopped" | "error">("idle");
   const [diagnosticSession, setDiagnosticSession] = useState<ScrapeSession | null>(null);
   const autoOpenedDiagnostics = useRef<Set<string>>(new Set());
+  const observedActiveSessionIds = useRef<Set<string>>(new Set());
+  const mountedAt = useRef(Date.now());
 
   useEffect(() => {
     if (!propertyId) {
@@ -67,7 +69,10 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
   }, [propertyId]);
 
   useEffect(() => {
-    const failedSession = sessions.find(isDiagnosticSession);
+    sessions.forEach((session) => {
+      if (["queued", "running"].includes(session.status)) observedActiveSessionIds.current.add(session.id);
+    });
+    const failedSession = sessions.find((session) => isDiagnosticSession(session) && shouldAutoOpenDiagnostic(session, observedActiveSessionIds.current, mountedAt.current));
     if (!failedSession || autoOpenedDiagnostics.current.has(failedSession.id)) return;
     autoOpenedDiagnostics.current.add(failedSession.id);
     setDiagnosticSession(failedSession);
@@ -202,9 +207,9 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
           <div className="mt-4 rounded-2xl border border-rose-300/20 bg-rose-400/10 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="font-semibold text-rose-50">Chrome scrape needs diagnosis</p>
+                <p className="font-semibold text-rose-50">Saved diagnostic from prior scan</p>
                 <p className="mt-1 text-sm leading-6 text-rose-100/80">
-                  {failedSession.error_message || failedSession.progress_label || "Open the diagnostic report to see what Chrome hit."}
+                  {failedSession.error_message || failedSession.progress_label || "Open the saved report, or run a new scan to test the current deployment."}
                 </p>
               </div>
               <button
@@ -213,7 +218,7 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
                 className="inline-flex w-fit items-center gap-2 rounded-full border border-rose-200/30 bg-white/10 px-3 py-1.5 text-xs font-semibold text-rose-50 transition hover:bg-white/15"
               >
                 <AlertTriangle className="size-3.5" />
-                Open diagnostic
+                Open saved diagnostic
               </button>
             </div>
           </div>
@@ -480,6 +485,13 @@ function diagnosticBundle(session: ScrapeSession) {
 
 function isDiagnosticSession(session: ScrapeSession) {
   return ["failed", "needs_review"].includes(session.status) || Boolean(session.error_code || session.error_message);
+}
+
+function shouldAutoOpenDiagnostic(session: ScrapeSession, observedActiveSessionIds: Set<string>, mountedAt: number) {
+  if (!isDiagnosticSession(session)) return false;
+  if (observedActiveSessionIds.has(session.id)) return true;
+  const eventTime = Date.parse(session.completed_at ?? session.started_at ?? session.created_at);
+  return Number.isFinite(eventTime) && eventTime >= mountedAt - 5000;
 }
 
 function BrowserChrome({ source, status, url }: { source: string; status: string; url: string }) {
