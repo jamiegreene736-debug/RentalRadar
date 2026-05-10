@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Chrome, Circle, Clock3, LoaderCircle, RefreshCw, Terminal } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Chrome, Circle, Clock3, LoaderCircle, RefreshCw, Square, Terminal } from "lucide-react";
 
 import { ScrapeSession, ScrapeSessionsResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,7 @@ type LiveScrapeScreensProps = {
 export function LiveScrapeScreens({ propertyId, pending = false, className }: LiveScrapeScreensProps) {
   const [sessions, setSessions] = useState<ScrapeSession[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "live" | "error">("idle");
+  const [cancelStatus, setCancelStatus] = useState<"idle" | "stopping" | "stopped" | "error">("idle");
 
   useEffect(() => {
     if (!propertyId) {
@@ -46,6 +47,9 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
         if (!cancelled) {
           setSessions(payload.sessions);
           setStatus("live");
+          if (payload.sessions.some((session) => ["queued", "running"].includes(session.status))) {
+            setCancelStatus("idle");
+          }
         }
       } catch {
         if (!cancelled) setStatus("error");
@@ -62,12 +66,41 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
 
   if (!propertyId && !pending) return null;
 
-  const liveSessions = sessions.filter((session) => ["queued", "running"].includes(session.status));
-  const hasLiveSessions = liveSessions.length > 0;
+  const activeSessions = sessions.filter((session) => ["queued", "running"].includes(session.status));
+  const runningSessions = activeSessions.filter((session) => session.status === "running");
+  const queuedSessions = activeSessions.filter((session) => session.status === "queued");
+  const visibleSessions = (runningSessions.length ? runningSessions : queuedSessions).slice(0, 4);
+  const hiddenActiveCount = Math.max(0, activeSessions.length - visibleSessions.length);
+  const hasActiveSessions = activeSessions.length > 0;
   const latestSavedSession = sessions[0];
-  const progressPercent = hasLiveSessions || pending ? aggregateProgress(liveSessions, pending) : 0;
-  const statusCopy = progressCopy(liveSessions, pending, sessions.length);
-  const progressTone = hasLiveSessions || pending ? aggregateProgressTone(liveSessions, status) : "bg-slate-700";
+  const progressPercent = hasActiveSessions || pending ? aggregateProgress(activeSessions, pending) : 0;
+  const statusCopy = progressCopy(activeSessions, pending, sessions.length);
+  const progressTone = hasActiveSessions || pending ? aggregateProgressTone(activeSessions, status) : "bg-slate-700";
+
+  async function stopScan() {
+    if (!propertyId || !hasActiveSessions || cancelStatus === "stopping") return;
+    setCancelStatus("stopping");
+    try {
+      const response = await fetch(`/api/backend/properties/${propertyId}/market-scan/cancel`, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(`Stop scan failed: ${response.status}`);
+      const payload = (await response.json()) as { canceled_job_ids?: string[] };
+      const canceledIds = new Set(payload.canceled_job_ids ?? []);
+      setSessions((current) =>
+        current.map((session) =>
+          canceledIds.has(session.id)
+            ? { ...session, status: "canceled", progress_percent: 0, progress_label: "Scan stopped by user" }
+            : session,
+        ),
+      );
+      setCancelStatus("stopped");
+    } catch {
+      setCancelStatus("error");
+    }
+  }
 
   return (
     <section
@@ -85,32 +118,55 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
             <p className="font-semibold text-white">Live Google Chrome scrape</p>
             <p className="text-sm text-slate-400">
               {propertyId
-                ? hasLiveSessions
-                  ? `${liveSessions.length} tab${liveSessions.length === 1 ? "" : "s"} active`
+                ? hasActiveSessions
+                  ? `${runningSessions.length} running, ${queuedSessions.length} queued`
                   : "No active browser scan right now"
                 : "Preparing Airbnb, VRBO, and Booking.com tabs"}
             </p>
           </div>
         </div>
-        <span
-          className={cn(
-            "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium",
-            status === "error"
-              ? "border-rose-300/25 bg-rose-400/10 text-rose-100"
-              : "border-cyan-200/20 bg-cyan-300/10 text-cyan-100",
-          )}
-        >
-          {status === "loading" || pending ? <LoaderCircle className="size-3.5 animate-spin" /> : <Circle className="size-2 fill-current" />}
-          {status === "error" ? "Preview unavailable" : status === "loading" || pending ? "Opening tabs" : hasLiveSessions ? "Live" : "Idle"}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {hasActiveSessions ? (
+            <button
+              type="button"
+              onClick={stopScan}
+              disabled={cancelStatus === "stopping"}
+              className="inline-flex items-center gap-2 rounded-full border border-rose-300/30 bg-rose-400/12 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-400/20 disabled:cursor-wait disabled:opacity-70"
+            >
+              {cancelStatus === "stopping" ? <LoaderCircle className="size-3.5 animate-spin" /> : <Square className="size-3.5 fill-current" />}
+              {cancelStatus === "stopping" ? "Stopping" : "Stop scan"}
+            </button>
+          ) : null}
+          <span
+            className={cn(
+              "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium",
+              status === "error" || cancelStatus === "error"
+                ? "border-rose-300/25 bg-rose-400/10 text-rose-100"
+                : "border-cyan-200/20 bg-cyan-300/10 text-cyan-100",
+            )}
+          >
+            {status === "loading" || pending ? <LoaderCircle className="size-3.5 animate-spin" /> : <Circle className="size-2 fill-current" />}
+            {cancelStatus === "error"
+              ? "Stop failed"
+              : cancelStatus === "stopped"
+                ? "Stopped"
+                : status === "error"
+                  ? "Preview unavailable"
+                  : status === "loading" || pending
+                    ? "Opening tabs"
+                    : hasActiveSessions
+                      ? "Live"
+                      : "Idle"}
+          </span>
+        </div>
       </div>
 
       <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-semibold text-white">{statusCopy}</p>
           <p className="text-xs font-medium text-slate-300">
-            {hasLiveSessions
-              ? `${liveSessions.length} active`
+            {hasActiveSessions
+              ? `${runningSessions.length} live Chrome window${runningSessions.length === 1 ? "" : "s"} · ${queuedSessions.length} queued`
               : latestSavedSession
                 ? `Last saved run: ${statusLabel(latestSavedSession.status)}`
                 : "No scans queued"}
@@ -123,17 +179,20 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
           />
         </div>
         <p className="mt-2 text-xs leading-5 text-slate-400">
-          {hasLiveSessions
-            ? "Progress is based on evidence captured: queue pickup, browser events, screenshots, and successful extraction. Review states do not count as completed scans."
+          {hasActiveSessions
+            ? "Progress is based on queue position, browser pickup, live screenshots, and extraction. Only running jobs are shown as Chrome windows; queued season scans wait their turn."
             : sessions.length
               ? "Past scan results are saved in Scan History. This panel only shows scans that are actively queued or running."
             : "RentalRadar will update this bar as soon as the property is created and scan jobs are returned by the API."}
         </p>
       </div>
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-3">
-        {hasLiveSessions ? (
-          liveSessions.map((session) => <BrowserMiniScreen key={session.id} session={session} />)
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        {hasActiveSessions ? (
+          <>
+            {visibleSessions.map((session) => <BrowserMiniScreen key={session.id} session={session} />)}
+            {hiddenActiveCount ? <QueuedSummary count={hiddenActiveCount} running={runningSessions.length} queued={queuedSessions.length} /> : null}
+          </>
         ) : pending ? (
           <PendingScreens />
         ) : (
@@ -181,6 +240,18 @@ function PendingScreens() {
   );
 }
 
+function QueuedSummary({ count, running, queued }: { count: number; running: number; queued: number }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+      <p className="font-semibold text-white">{count} more scan job{count === 1 ? "" : "s"} waiting</p>
+      <p className="mt-2 text-sm leading-6 text-slate-400">
+        RentalRadar is keeping the Chrome view readable: {running} running now, {queued} queued behind it. Queued jobs will appear as
+        larger browser windows when the worker starts them.
+      </p>
+    </div>
+  );
+}
+
 function BrowserMiniScreen({ session }: { session: ScrapeSession }) {
   const latestEvent = session.events[0];
   const timeline = useMemo(() => session.events.slice(0, 4), [session.events]);
@@ -192,7 +263,7 @@ function BrowserMiniScreen({ session }: { session: ScrapeSession }) {
       <BrowserChrome source={source} status={session.status} url={displayUrl} />
       <div className="relative aspect-video overflow-hidden bg-slate-950">
         {session.latest_screenshot_data_url ? (
-          <img src={session.latest_screenshot_data_url} alt={`${source} scrape screen`} className="size-full object-cover" />
+          <img src={session.latest_screenshot_data_url} alt={`${source} scrape screen`} className="size-full object-contain" />
         ) : (
           <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.18),transparent_32%),linear-gradient(135deg,#0f172a,#020617)]">
             <div className="max-w-[82%] text-center">

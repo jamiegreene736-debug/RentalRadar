@@ -18,6 +18,7 @@ from app.db.session import SessionLocal
 DB_EVENT_ALLOWLIST = {
     "browser.launched",
     "browser.shutdown",
+    "scrape.canceled",
     "scrape.page_loaded",
     "scrape.live_screenshot",
     "scrape.screenshot",
@@ -172,6 +173,8 @@ def _event_message(event: str, payload: dict[str, Any]) -> str | None:
         return "Chrome screen preview captured."
     if event == "scrape.completed":
         return "Extraction run finished."
+    if event == "scrape.canceled":
+        return "Chrome session stopped by user."
     if event == "browser.shutdown":
         return "Chrome session closed."
     if "message" in payload:

@@ -85,6 +85,13 @@ class MarketScanResponse(BaseModel):
     message: str
 
 
+class CancelMarketScanResponse(BaseModel):
+    property_id: UUID
+    canceled_job_ids: list[UUID]
+    canceled_count: int
+    message: str
+
+
 class AddressSuggestionResponse(BaseModel):
     place_id: str
     formatted_address: str

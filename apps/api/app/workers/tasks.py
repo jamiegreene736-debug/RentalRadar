@@ -6,6 +6,8 @@ from uuid import UUID
 
 from celery.signals import worker_ready
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 from playwright.async_api import Page
 
 from app.agents.orchestrator import MarketScrapeOrchestrator
@@ -62,6 +64,8 @@ def run_scrape_job(self, scrape_job_id: str) -> dict:
         job = db.get(ScrapeJob, UUID(scrape_job_id))
         if job is None:
             return {"status": "missing", "scrape_job_id": scrape_job_id}
+        if job.status == ScrapeJobStatus.canceled:
+            return {"status": "canceled", "scrape_job_id": scrape_job_id}
 
         job.status = ScrapeJobStatus.running
         job.started_at = datetime.now(timezone.utc)
@@ -84,19 +88,20 @@ def run_scrape_job(self, scrape_job_id: str) -> dict:
         ))
         db.commit()
         run = asyncio.run(MarketScrapeOrchestrator().run(target))
+        db.refresh(job)
+        if job.status == ScrapeJobStatus.canceled:
+            db.add(
+                ScrapeJobLog(
+                    scrape_job_id=job.id,
+                    level="warning",
+                    event="scrape.canceled",
+                    message="Scan stopped before results were saved.",
+                )
+            )
+            db.commit()
+            return {"status": "canceled", "scrape_job_id": scrape_job_id}
 
-        strategy = ScraperStrategy(
-            source=run.strategy.source,
-            domain=run.strategy.domain,
-            layout_fingerprint=run.strategy.layout_fingerprint,
-            strategy_json=run.strategy.strategy_json,
-            version=run.strategy.strategy_json.get("version", 1),
-            success_rate=1 if run.result.success else 0,
-            active=True,
-            created_by_agent="playwright_trainer",
-        )
-        db.add(strategy)
-        db.flush()
+        strategy = _get_or_create_scraper_strategy(db, run.strategy, run.result.success)
 
         job.scraper_strategy_id = strategy.id
         snapshot = ScrapeSnapshot(
@@ -174,6 +179,7 @@ def run_scrape_job(self, scrape_job_id: str) -> dict:
         job.status = ScrapeJobStatus.succeeded
         job.completed_at = datetime.now(timezone.utc)
         job.result_summary = {
+            **(job.result_summary if isinstance(job.result_summary, dict) else {}),
             "rates_extracted": len(run.result.rates),
             "healed": run.healed,
             "confidence": run.result.extraction_confidence,
@@ -197,6 +203,17 @@ def run_scrape_job(self, scrape_job_id: str) -> dict:
         error_message = str(exc) or type(exc).__name__
         job = db.get(ScrapeJob, UUID(scrape_job_id))
         if job is not None:
+            if job.status == ScrapeJobStatus.canceled:
+                db.add(
+                    ScrapeJobLog(
+                        scrape_job_id=job.id,
+                        level="warning",
+                        event="scrape.canceled",
+                        message="Scan stopped by the user.",
+                    )
+                )
+                db.commit()
+                return {"status": "canceled", "scrape_job_id": scrape_job_id}
             if self.request.retries < self.max_retries:
                 job.status = ScrapeJobStatus.queued
                 job.started_at = None
@@ -238,6 +255,56 @@ def run_scrape_job(self, scrape_job_id: str) -> dict:
         return {"status": "failed", "scrape_job_id": scrape_job_id, "error": str(exc)}
     finally:
         db.close()
+
+
+def _get_or_create_scraper_strategy(
+    db: Session,
+    plan: ScraperStrategyPlan,
+    success: bool,
+) -> ScraperStrategy:
+    version = int(plan.strategy_json.get("version", 1))
+    existing = db.scalar(
+        select(ScraperStrategy)
+        .where(ScraperStrategy.source == plan.source)
+        .where(ScraperStrategy.domain == plan.domain)
+        .where(ScraperStrategy.layout_fingerprint == plan.layout_fingerprint)
+        .where(ScraperStrategy.version == version)
+    )
+    if existing:
+        existing.strategy_json = plan.strategy_json
+        existing.success_rate = 1 if success else 0
+        existing.active = True
+        return existing
+
+    strategy = ScraperStrategy(
+        source=plan.source,
+        domain=plan.domain,
+        layout_fingerprint=plan.layout_fingerprint,
+        strategy_json=plan.strategy_json,
+        version=version,
+        success_rate=1 if success else 0,
+        active=True,
+        created_by_agent="playwright_trainer",
+    )
+    try:
+        with db.begin_nested():
+            db.add(strategy)
+            db.flush()
+        return strategy
+    except IntegrityError:
+        existing = db.scalar(
+            select(ScraperStrategy)
+            .where(ScraperStrategy.source == plan.source)
+            .where(ScraperStrategy.domain == plan.domain)
+            .where(ScraperStrategy.layout_fingerprint == plan.layout_fingerprint)
+            .where(ScraperStrategy.version == version)
+        )
+        if existing:
+            existing.strategy_json = plan.strategy_json
+            existing.success_rate = 1 if success else 0
+            existing.active = True
+            return existing
+        raise
 
 
 @celery_app.task(name="app.workers.tasks.run_trained_scraping_script", bind=True, max_retries=2)

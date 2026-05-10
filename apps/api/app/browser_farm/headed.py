@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncIterator
+from uuid import UUID
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
@@ -14,6 +15,8 @@ from app.browser_farm.action_logger import BrowserActionLogger
 from app.browser_farm.proxy import ProxyLease
 from app.browser_farm.stealth import apply_stealth_patches, humanize_page, random_fingerprint
 from app.config import get_settings
+from app.db.models import ScrapeJob, ScrapeJobStatus
+from app.db.session import SessionLocal
 
 
 _browser_slots: asyncio.Semaphore | None = None
@@ -63,6 +66,7 @@ async def launch_headed_browser(
     browser: Browser | None = None
     context: BrowserContext | None = None
     screenshot_heartbeat: asyncio.Task[None] | None = None
+    cancel_watcher: asyncio.Task[None] | None = None
     user_data_dir = tempfile.mkdtemp(prefix=f"rr-browser-{job_id}-")
     action_logger = BrowserActionLogger(job_id)
     profile = random_fingerprint()
@@ -129,6 +133,7 @@ async def launch_headed_browser(
         action_logger.write("browser.launched", {"proxy": proxy.redacted() if proxy else None, "profile": profile})
         await action_logger.screenshot(page, "scrape.live_screenshot")
         screenshot_heartbeat = action_logger.start_screenshot_heartbeat(page)
+        cancel_watcher = asyncio.create_task(_watch_for_cancel(job_id, page, action_logger))
         await humanize_page(page)
         yield HeadedBrowserSession(
             playwright=playwright,
@@ -140,6 +145,12 @@ async def launch_headed_browser(
             proxy=proxy,
         )
     finally:
+        if cancel_watcher:
+            cancel_watcher.cancel()
+            try:
+                await cancel_watcher
+            except asyncio.CancelledError:
+                pass
         if screenshot_heartbeat:
             screenshot_heartbeat.cancel()
             try:
@@ -176,3 +187,32 @@ def _cleanup_dir(path: str) -> None:
         root.rmdir()
     except OSError:
         pass
+
+
+async def _watch_for_cancel(job_id: str, page: Page, action_logger: BrowserActionLogger) -> None:
+    try:
+        job_uuid = UUID(job_id)
+    except ValueError:
+        return
+
+    while True:
+        await asyncio.sleep(2)
+        if page.is_closed():
+            return
+        if not await asyncio.to_thread(_is_canceled, job_uuid):
+            continue
+        action_logger.write("scrape.canceled", {"message": "Dashboard stop requested; closing headed Chrome."})
+        try:
+            await page.close()
+        except Exception:
+            pass
+        return
+
+
+def _is_canceled(job_id: UUID) -> bool:
+    db = SessionLocal()
+    try:
+        job = db.get(ScrapeJob, job_id)
+        return job is not None and job.status == ScrapeJobStatus.canceled
+    finally:
+        db.close()

@@ -21,6 +21,7 @@ from app.deps import RequestContext, get_request_context
 from app.schemas import (
     AddressPropertyCreate,
     AddressSuggestionResponse,
+    CancelMarketScanResponse,
     MarketRatesResponse,
     MonthlyRateForecastResponse,
     PricingRecommendationResponse,
@@ -183,6 +184,64 @@ def queue_market_scan(
             "An active scan is already running for this property."
             if not queued_job_ids
             else f"Queued {len(queued_job_ids)} headed-browser market scan{'' if len(queued_job_ids) == 1 else 's'}."
+        ),
+    )
+
+
+@router.post("/properties/{property_id}/market-scan/cancel", response_model=CancelMarketScanResponse)
+def cancel_market_scan(
+    property_id: UUID,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> CancelMarketScanResponse:
+    rental = db.scalar(
+        select(Property)
+        .where(Property.id == property_id)
+        .where(Property.organization_id == context.organization_id)
+        .where(Property.active.is_(True))
+    )
+    if rental is None:
+        raise HTTPException(status_code=404, detail="Property not found")
+
+    now = datetime.now(timezone.utc)
+    jobs = db.scalars(
+        select(ScrapeJob)
+        .where(ScrapeJob.property_id == property_id)
+        .where(ScrapeJob.organization_id == context.organization_id)
+        .where(ScrapeJob.status.in_([ScrapeJobStatus.queued, ScrapeJobStatus.running]))
+        .order_by(desc(ScrapeJob.created_at))
+        .limit(100)
+    ).all()
+    canceled_ids: list[UUID] = []
+    for job in jobs:
+        job.status = ScrapeJobStatus.canceled
+        job.completed_at = now
+        job.error_code = "scan_canceled_by_user"
+        job.error_message = "Scan stopped by the user."
+        job.request_context = {
+            **(job.request_context or {}),
+            "canceled_by_user_at": now.isoformat(),
+        }
+        db.add(
+            ScrapeJobLog(
+                scrape_job_id=job.id,
+                level="warning",
+                event="scrape.canceled",
+                message=job.error_message,
+                payload={"source": "dashboard_stop_scan"},
+            )
+        )
+        canceled_ids.append(job.id)
+
+    db.commit()
+    return CancelMarketScanResponse(
+        property_id=property_id,
+        canceled_job_ids=canceled_ids,
+        canceled_count=len(canceled_ids),
+        message=(
+            "No queued or running scan jobs were active."
+            if not canceled_ids
+            else f"Stopped {len(canceled_ids)} queued/running scan job{'' if len(canceled_ids) == 1 else 's'}."
         ),
     )
 
