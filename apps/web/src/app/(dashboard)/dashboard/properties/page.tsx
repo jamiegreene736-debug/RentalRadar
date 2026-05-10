@@ -1,4 +1,3 @@
-import { GlassCard, PanelTitle } from "@/app/(dashboard)/components/glass-card";
 import { PropertySearchForm } from "@/components/property-search-form";
 import { StoredPropertiesSection } from "@/components/stored-properties-section";
 import { getProperties } from "@/lib/api";
@@ -11,8 +10,9 @@ export default async function PropertiesPage() {
 
   return (
     <div className="grid gap-6">
-      <div className="grid gap-6 xl:grid-cols-[440px_minmax(0,1fr)]">
+      <div className="grid gap-6 xl:grid-cols-[440px_minmax(0,1fr)] xl:items-start">
         <PropertySearchForm
+          showScrapePreview={false}
           initialAddress={activeProperty?.formatted_address ?? activeProperty?.address_line1 ?? ""}
           title={properties.length ? "Search or update an address" : "Add your first property"}
           description={
@@ -21,15 +21,8 @@ export default async function PropertiesPage() {
               : "Enter the property address you want RentalRadar to analyze."
           }
         />
-        <GlassCard className="p-6">
-          <PanelTitle
-            eyebrow="Property Detail"
-            title="Stored property workspace"
-            copy="Saved properties now appear below with rerun controls, detail links, and scan-history access."
-          />
-        </GlassCard>
+        <StoredPropertiesSection properties={properties} compact />
       </div>
-      <StoredPropertiesSection properties={properties} />
     </div>
   );
 }
