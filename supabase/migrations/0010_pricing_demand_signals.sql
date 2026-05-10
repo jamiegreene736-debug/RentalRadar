@@ -28,11 +28,38 @@ create index if not exists pricing_demand_signals_org_dates_idx
 create index if not exists pricing_demand_signals_property_dates_idx
   on public.pricing_demand_signals(property_id, starts_on, ends_on);
 
-create trigger set_pricing_demand_signals_updated_at before update on public.pricing_demand_signals
-  for each row execute function public.set_updated_at();
+do $$
+begin
+  if exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'set_updated_at'
+  ) then
+    drop trigger if exists set_pricing_demand_signals_updated_at
+      on public.pricing_demand_signals;
+    create trigger set_pricing_demand_signals_updated_at before update
+      on public.pricing_demand_signals
+      for each row execute function public.set_updated_at();
+  end if;
+end $$;
 
 alter table public.pricing_demand_signals enable row level security;
 
-create policy "members can read pricing demand signals"
-  on public.pricing_demand_signals for select
-  using (public.is_org_member(organization_id));
+do $$
+begin
+  if exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'is_org_member'
+  ) then
+    drop policy if exists "members can read pricing demand signals"
+      on public.pricing_demand_signals;
+    create policy "members can read pricing demand signals"
+      on public.pricing_demand_signals for select
+      using (public.is_org_member(organization_id));
+  end if;
+end $$;
