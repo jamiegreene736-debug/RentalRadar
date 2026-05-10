@@ -27,6 +27,7 @@ celery_app.conf.update(
         "app.workers.tasks.run_trained_scraping_script": {"queue": "scraping"},
         "app.workers.tasks.execute_trained_scraper": {"queue": "scraping"},
         "app.workers.tasks.run_scheduled_market_scans": {"queue": "scheduler"},
+        "app.workers.tasks.refresh_live_demand_signals": {"queue": "scheduler"},
         "app.workers.tasks.push_rate_to_pms": {"queue": "pms"},
         "app.workers.tasks.ota_direct_push_task": {"queue": "scraping"},
         "app.workers.tasks.pull_rates_from_pms": {"queue": "pms"},
@@ -42,5 +43,9 @@ celery_app.conf.beat_schedule = {
     "scheduled-pms-two-way-sync": {
         "task": "app.workers.tasks.sync_all_pms_connections",
         "schedule": crontab(minute="*/30"),
+    },
+    "scheduled-live-demand-signals": {
+        "task": "app.workers.tasks.refresh_live_demand_signals",
+        "schedule": crontab(minute=17, hour="*/6"),
     },
 }

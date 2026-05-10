@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Activity, Bot, Building2, CalendarRange, ChevronLeft, Chrome, Database, Layers3, Percent, PlugZap, SlidersHorizontal, Target, UserCircle } from "lucide-react";
+import { Activity, Bot, BrainCircuit, Building2, CalendarRange, ChevronLeft, Chrome, Database, Layers3, Percent, PlugZap, SlidersHorizontal, Target, UserCircle } from "lucide-react";
 import { useState } from "react";
 
 import { BrandLogo } from "@/components/brand-logo";
@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 const nav = [
   { href: "/dashboard/properties", label: "Saved Properties", icon: Building2 },
   { href: "/dashboard/suggested-rates", label: "Suggested Rates", icon: Percent },
+  { href: "/dashboard/llm-pricing", label: "LLM Layer", icon: BrainCircuit },
   { href: "/dashboard/rate-stack", label: "Rate Stack", icon: Layers3 },
   { href: "/dashboard/season-calendar", label: "Season Calendar", icon: CalendarRange },
   { href: "/dashboard/market-evidence", label: "Market Evidence", icon: Database },

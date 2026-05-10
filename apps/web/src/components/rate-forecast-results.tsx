@@ -411,8 +411,10 @@ function statusLabel(value: string, length: "short" | "long" = "short") {
   const shortLabels: Record<string, string> = {
     active: "Active",
     active_model: "Model",
+    awaiting_feed: "Needs feed",
     awaiting_clean_scrape: "Awaiting",
     live_agent_scrape: "Live scrape",
+    manual_active: "Manual",
     modeled: "Modeled",
     modeled_until_scrape: "Modeled",
     needs_calendar_feed: "Needs feed",
@@ -420,6 +422,7 @@ function statusLabel(value: string, length: "short" | "long" = "short") {
     needs_owner_input: "Needs input",
     needs_pms_feed: "Needs PMS",
     pending_review_feed: "Pending",
+    ready_for_inputs: "Ready",
   };
   if (length === "short" && shortLabels[value]) return shortLabels[value];
   return value.replaceAll("_", " ");

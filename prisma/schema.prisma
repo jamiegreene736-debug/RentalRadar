@@ -596,6 +596,28 @@ model LocalEvent {
   @@map("local_events")
 }
 
+model PricingDemandSignal {
+  id                String   @id @default(uuid()) @db.Uuid
+  organizationId    String   @map("organization_id") @db.Uuid
+  propertyId        String?  @map("property_id") @db.Uuid
+  signalType        String   @map("signal_type")
+  label             String
+  startsOn          DateTime @map("starts_on") @db.Date
+  endsOn            DateTime @map("ends_on") @db.Date
+  demandScore       Decimal  @default(0.5) @map("demand_score") @db.Decimal(5, 4)
+  rateImpactPercent Decimal? @map("rate_impact_percent") @db.Decimal(6, 4)
+  confidence        Decimal  @default(0.65) @db.Decimal(5, 4)
+  source            String   @default("manual")
+  metadata          Json     @default("{}")
+  observedAt        DateTime @default(now()) @map("observed_at") @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([organizationId, startsOn, endsOn])
+  @@index([propertyId, startsOn, endsOn])
+  @@map("pricing_demand_signals")
+}
+
 model OccupancySignal {
   id                String   @id @default(uuid()) @db.Uuid
   propertyId        String   @map("property_id") @db.Uuid

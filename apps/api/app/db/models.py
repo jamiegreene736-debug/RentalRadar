@@ -566,6 +566,24 @@ class LocalEvent(Base, TimestampMixin):
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
 
 
+class PricingDemandSignal(Base, TimestampMixin):
+    __tablename__ = "pricing_demand_signals"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    property_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    signal_type: Mapped[str] = mapped_column(Text)
+    label: Mapped[str] = mapped_column(Text)
+    starts_on: Mapped[date] = mapped_column(Date, index=True)
+    ends_on: Mapped[date] = mapped_column(Date, index=True)
+    demand_score: Mapped[float] = mapped_column(Numeric(5, 4), default=0.5)
+    rate_impact_percent: Mapped[float | None] = mapped_column(Numeric(6, 4))
+    confidence: Mapped[float] = mapped_column(Numeric(5, 4), default=0.65)
+    source: Mapped[str] = mapped_column(Text, default="manual")
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class OccupancySignal(Base):
     __tablename__ = "occupancy_signals"
 

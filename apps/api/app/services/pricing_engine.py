@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
+import os
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
 from statistics import median
 from uuid import UUID
 
+import httpx
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
@@ -17,12 +20,14 @@ from app.db.models import (
     OccupancySignal,
     PricingExperiment,
     PricingExperimentAssignment,
+    PricingDemandSignal,
     PricingPerformanceEvent,
     PricingRecommendation,
     PricingRecommendationStatus,
     Property,
     RateObservation,
 )
+from app.services.demand_signals import refresh_live_demand_signals
 from app.services.market_booked_data import MarketBookedRateSignal, fetch_market_booked_rate_signals
 
 
@@ -52,15 +57,50 @@ class PricingDecision:
 
 
 class PricingLLMAdvisor:
-    """LLM advisory seam for qualitative demand reasoning.
-
-    The default implementation is deterministic so workers can run without an
-    LLM key. A production adapter can call the configured LLM with the same
-    compact context and return `rate_bias`, `confidence_bias`, and text notes.
-    """
+    """Provider-aware LLM layer for qualitative demand reasoning."""
 
     def advise(self, context: dict) -> dict:
+        fallback = self._heuristic_advice(context)
+        try:
+            settings = get_settings()
+        except Exception:
+            return fallback | {
+                "mode": "deterministic_fallback",
+                "status": "settings_unavailable",
+            }
+        provider = settings.llm_provider.lower().strip()
+        if provider not in {"openai", "openai-compatible"}:
+            return fallback | {
+                "mode": "deterministic_fallback",
+                "status": "provider_not_enabled",
+            }
+        if not settings.openai_api_key:
+            return fallback | {
+                "provider": provider,
+                "mode": "deterministic_fallback",
+                "status": "missing_openai_api_key",
+            }
+
+        try:
+            llm_advice = self._openai_advice(context, fallback)
+        except Exception as exc:
+            return fallback | {
+                "provider": provider,
+                "mode": "deterministic_fallback",
+                "status": "llm_call_failed",
+                "error": exc.__class__.__name__,
+            }
+
+        return llm_advice | {
+            "provider": provider,
+            "model": settings.llm_model,
+            "mode": "llm",
+            "status": "succeeded",
+        }
+
+    def _heuristic_advice(self, context: dict) -> dict:
         event_strength = context["signals"]["event_strength"]
+        demand_pressure = context["signals"].get("demand_pressure", 0)
         market_compression = context["signals"]["market_compression"]
         live_data_quality = context["signals"]["live_data_quality"]
         risk_flags: list[str] = []
@@ -69,6 +109,10 @@ class PricingLLMAdvisor:
 
         if event_strength >= 0.75:
             rate_bias += 0.03
+        if demand_pressure >= 0.65:
+            rate_bias += 0.025
+        if demand_pressure <= -0.35:
+            rate_bias -= 0.025
         if market_compression >= 0.80:
             rate_bias += 0.025
         if live_data_quality < 0.45:
@@ -83,8 +127,66 @@ class PricingLLMAdvisor:
             "confidence_bias": confidence_bias,
             "summary": _summary_from_context(context),
             "risk_flags": risk_flags,
-            "provider": get_settings().llm_provider,
+            "provider": os.environ.get("LLM_PROVIDER", "stub"),
+            "model": "rules",
+            "demand_read": _demand_read_from_context(context),
+            "strategy": "Use live browser evidence and booked-market signals when they agree; downshift when evidence is thin or near-term demand is soft.",
+            "evidence_used": _llm_evidence_used(context),
         }
+
+    def _openai_advice(self, context: dict, fallback: dict) -> dict:
+        settings = get_settings()
+        url = f"{settings.openai_base_url.rstrip('/')}/chat/completions"
+        payload = {
+            "model": settings.llm_model,
+            "temperature": 0.15,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are RentalRadar's vacation-rental revenue manager. "
+                        "Return compact JSON only. Adjust price cautiously; never exceed "
+                        "rate_bias +/-0.08 or confidence_bias +/-0.12. Favor evidence from "
+                        "live guest-visible comps, real booked-rate data, PMS occupancy, "
+                        "booking pace, events, weather, flight demand, lead time, and property guardrails."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "task": "Advise on the final pricing decision.",
+                            "required_json_keys": [
+                                "rate_bias",
+                                "confidence_bias",
+                                "summary",
+                                "demand_read",
+                                "strategy",
+                                "risk_flags",
+                                "evidence_used",
+                            ],
+                            "fallback_advice": fallback,
+                            "decision_context": _compact_llm_context(context),
+                        },
+                        default=str,
+                    ),
+                },
+            ],
+        }
+        with httpx.Client(timeout=settings.llm_timeout_seconds) as client:
+            response = client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {settings.openai_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            response.raise_for_status()
+        message = response.json()["choices"][0]["message"]["content"]
+        parsed = json.loads(message)
+        return _normalize_llm_advice(parsed, fallback)
 
 
 class RentalRadarPricingEngine:
@@ -100,11 +202,13 @@ class RentalRadarPricingEngine:
         performance_events: list[PricingPerformanceEvent],
         start_date: date,
         end_date: date,
+        demand_signals: list[PricingDemandSignal] | None = None,
         market_booked_signals: list[MarketBookedRateSignal] | None = None,
         market_booked_status: dict | None = None,
     ) -> list[PricingDecision]:
         market_by_date = _market_metrics_by_date(market_observations)
         events_by_date = _events_by_date(events)
+        demand_signals_by_date = _demand_signals_by_date(demand_signals or [])
         occupancy_by_date = _latest_occupancy_by_date(occupancy_signals)
         booked_signals = market_booked_signals or []
         performance = _performance_summary(performance_events)
@@ -116,6 +220,7 @@ class RentalRadarPricingEngine:
             occupancy = occupancy_by_date.get(current)
             market_booked = _market_booked_signal_for_date(booked_signals, current)
             day_events = events_by_date.get(current, [])
+            day_demand_signals = demand_signals_by_date.get(current, [])
             lead_time_days = max(0, (current - date.today()).days)
 
             baseline = _baseline_rate_cents(rental, market, market_booked)
@@ -125,6 +230,7 @@ class RentalRadarPricingEngine:
                 market,
                 occupancy,
                 day_events,
+                day_demand_signals,
                 performance,
                 market_booked,
             )
@@ -140,6 +246,7 @@ class RentalRadarPricingEngine:
                 market_booked=market_booked,
                 market_booked_status=market_booked_status,
                 events=day_events,
+                demand_signals=day_demand_signals,
                 multipliers=multipliers,
                 lead_time_days=lead_time_days,
                 performance=performance,
@@ -148,10 +255,17 @@ class RentalRadarPricingEngine:
             recommended = int(pre_ai_rate * (1 + ai_advice["rate_bias"]))
             recommended = _clamp_rate(recommended, rental.min_price_cents, rental.max_price_cents)
 
-            min_stay = _recommended_min_stay(current, lead_time_days, market, occupancy, day_events)
+            min_stay = _recommended_min_stay(
+                current,
+                lead_time_days,
+                market,
+                occupancy,
+                day_events,
+                day_demand_signals,
+            )
             discount = _discount_percent(lead_time_days, market, occupancy)
             confidence = (
-                _confidence_score(market, occupancy, day_events, performance)
+                _confidence_score(market, occupancy, day_events, day_demand_signals, performance)
                 + ai_advice["confidence_bias"]
             )
             if market_booked:
@@ -173,6 +287,7 @@ class RentalRadarPricingEngine:
                     occupancy=occupancy,
                     market_booked=market_booked,
                     events=day_events,
+                    demand_signals=day_demand_signals,
                     rentalradar_rate_cents=recommended,
                 ),
             }
@@ -195,6 +310,7 @@ def generate_recommendations(
     property_id: UUID,
     start_date: date | None = None,
     end_date: date | None = None,
+    refresh_demand: bool = True,
 ) -> list[PricingRecommendation]:
     rental = db.scalar(select(Property).where(Property.id == property_id))
     if rental is None:
@@ -221,6 +337,20 @@ def generate_recommendations(
             .where((LocalEvent.property_id.is_(None)) | (LocalEvent.property_id == property_id))
         ).all()
     )
+    if refresh_demand:
+        refresh_live_demand_signals(db, property_id, start, end)
+    demand_signals = list(
+        db.scalars(
+            select(PricingDemandSignal)
+            .where(PricingDemandSignal.organization_id == rental.organization_id)
+            .where(PricingDemandSignal.starts_on <= end)
+            .where(PricingDemandSignal.ends_on >= start)
+            .where(
+                (PricingDemandSignal.property_id.is_(None))
+                | (PricingDemandSignal.property_id == property_id)
+            )
+        ).all()
+    )
     occupancy = list(
         db.scalars(
             select(OccupancySignal)
@@ -244,6 +374,7 @@ def generate_recommendations(
         rental=rental,
         market_observations=observations,
         events=events,
+        demand_signals=demand_signals,
         occupancy_signals=occupancy,
         performance_events=performance,
         start_date=start,
@@ -466,6 +597,18 @@ def _events_by_date(events: list[LocalEvent]) -> dict[date, list[LocalEvent]]:
     return grouped
 
 
+def _demand_signals_by_date(
+    signals: list[PricingDemandSignal],
+) -> dict[date, list[PricingDemandSignal]]:
+    grouped: dict[date, list[PricingDemandSignal]] = defaultdict(list)
+    for signal in signals:
+        current = signal.starts_on
+        while current <= signal.ends_on:
+            grouped[current].append(signal)
+            current += timedelta(days=1)
+    return grouped
+
+
 def _latest_occupancy_by_date(signals: list[OccupancySignal]) -> dict[date, OccupancySignal]:
     latest: dict[date, OccupancySignal] = {}
     for signal in signals:
@@ -544,6 +687,7 @@ def _multipliers(
     market: MarketMetrics,
     occupancy: OccupancySignal | None,
     events: list[LocalEvent],
+    demand_signals: list[PricingDemandSignal],
     performance: dict,
     market_booked: MarketBookedRateSignal | None,
 ) -> dict[str, float]:
@@ -610,12 +754,14 @@ def _multipliers(
     conversion = performance.get("conversion_rate")
     if conversion is not None:
         historical = 1.04 if conversion >= 0.72 else 0.97 if conversion <= 0.35 else 1.0
+    demand_intelligence = 1 + _combined_demand_signal_impact(demand_signals)
     return {
         "seasonality": seasonal,
         "day_of_week": dow,
         "lead_time": lead,
         "live_market_compression": compression,
         "local_events": event,
+        "demand_intelligence": demand_intelligence,
         "occupancy_pacing": occ,
         "historical_performance": historical,
     }
@@ -631,11 +777,13 @@ def _decision_context(
     market_booked: MarketBookedRateSignal | None,
     market_booked_status: dict | None,
     events: list[LocalEvent],
+    demand_signals: list[PricingDemandSignal],
     multipliers: dict[str, float],
     lead_time_days: int,
     performance: dict,
 ) -> dict:
     event_strength = max((float(event.demand_score) for event in events), default=0)
+    demand_pressure = _combined_demand_signal_impact(demand_signals)
     compression = 1 - market.available_ratio if market.available_ratio is not None else 0.5
     live_quality = min(
         1.0, (market.sample_size / 12) * 0.7 + market.avg_extraction_confidence * 0.3
@@ -671,6 +819,7 @@ def _decision_context(
             }
             for event in events
         ],
+        "demand_signals": [_demand_signal_context(signal) for signal in demand_signals],
         "occupancy": {
             "property_occupancy": float(occupancy.property_occupancy)
             if occupancy and occupancy.property_occupancy is not None
@@ -708,6 +857,9 @@ def _decision_context(
         "multipliers": {key: round(value, 4) for key, value in multipliers.items()},
         "signals": {
             "event_strength": round(event_strength, 4),
+            "demand_pressure": round(demand_pressure, 4),
+            "weather_pressure": round(_signal_type_pressure(demand_signals, "weather"), 4),
+            "flight_pressure": round(_signal_type_pressure(demand_signals, "flight"), 4),
             "market_compression": round(compression, 4),
             "live_data_quality": round(live_quality, 4),
             "lead_time_days": lead_time_days,
@@ -723,12 +875,15 @@ def _competitive_comparison(
     occupancy: OccupancySignal | None,
     market_booked: MarketBookedRateSignal | None,
     events: list[LocalEvent],
+    demand_signals: list[PricingDemandSignal],
     rentalradar_rate_cents: int,
 ) -> dict:
     base = rental.base_price_cents or market.comp_median_cents or rentalradar_rate_cents
     calendar_benchmark = int(base * (1.12 if stay_date.weekday() in (4, 5) else 1.0))
     if events:
         calendar_benchmark = int(calendar_benchmark * 1.08)
+    if demand_signals:
+        calendar_benchmark = int(calendar_benchmark * (1 + min(0.10, max(0, _combined_demand_signal_impact(demand_signals)))))
     comp_blend = market.comp_median_cents or base
     booked_rate = _booked_rate_cents(market_booked)
     if booked_rate and market.comp_median_cents:
@@ -743,7 +898,7 @@ def _competitive_comparison(
         "market_paid_rate_cents": booked_rate,
         "market_paid_source": market_booked.source if market_booked else None,
         "rentalradar_live_rate_cents": rentalradar_rate_cents,
-        "advantage": "RentalRadar weights fresh guest-visible rates, market booked-rate evidence, PMS pacing, source confidence, and event strength in the same decision rather than relying on one data source.",
+        "advantage": "RentalRadar weights fresh guest-visible rates, market booked-rate evidence, PMS pacing, source confidence, local events, weather, and flight demand in the same decision rather than relying on one data source.",
     }
 
 
@@ -753,8 +908,15 @@ def _recommended_min_stay(
     market: MarketMetrics,
     occupancy: OccupancySignal | None,
     events: list[LocalEvent],
+    demand_signals: list[PricingDemandSignal],
 ) -> int:
     if events and max(float(event.demand_score) for event in events) >= 0.75:
+        return 3
+    if any(
+        signal.signal_type in {"area_event", "flight", "holiday"}
+        and _demand_signal_impact(signal) >= 0.08
+        for signal in demand_signals
+    ):
         return 3
     if stay_date.weekday() in (4, 5):
         return 2
@@ -795,21 +957,86 @@ def _discount_percent(
     return 5.0 if soft_market else 0.0
 
 
+def _demand_signal_context(signal: PricingDemandSignal) -> dict:
+    return {
+        "type": signal.signal_type,
+        "label": signal.label,
+        "demand_score": float(signal.demand_score),
+        "rate_impact_percent": float(signal.rate_impact_percent)
+        if signal.rate_impact_percent is not None
+        else None,
+        "effective_impact_percent": round(_demand_signal_impact(signal), 4),
+        "confidence": float(signal.confidence),
+        "source": signal.source,
+    }
+
+
+def _combined_demand_signal_impact(signals: list[PricingDemandSignal]) -> float:
+    if not signals:
+        return 0.0
+    total = sum(_demand_signal_impact(signal) for signal in signals)
+    return round(max(-0.18, min(0.24, total)), 4)
+
+
+def _signal_type_pressure(signals: list[PricingDemandSignal], signal_type: str) -> float:
+    return round(
+        max(
+            -0.18,
+            min(
+                0.24,
+                sum(
+                    _demand_signal_impact(signal)
+                    for signal in signals
+                    if signal.signal_type == signal_type
+                ),
+            ),
+        ),
+        4,
+    )
+
+
+def _demand_signal_impact(signal: PricingDemandSignal) -> float:
+    if signal.rate_impact_percent is not None:
+        raw_impact = float(signal.rate_impact_percent)
+    else:
+        caps = {
+            "area_event": 0.18,
+            "flight": 0.12,
+            "weather": 0.10,
+            "holiday": 0.14,
+            "market": 0.10,
+            "custom": 0.08,
+        }
+        cap = caps.get(signal.signal_type, 0.08)
+        raw_impact = (float(signal.demand_score) - 0.5) * 2 * cap
+    confidence = max(0.0, min(1.0, float(signal.confidence)))
+    dampened = raw_impact * (0.55 + confidence * 0.45)
+    return round(max(-0.18, min(0.24, dampened)), 4)
+
+
 def _confidence_score(
     market: MarketMetrics,
     occupancy: OccupancySignal | None,
     events: list[LocalEvent],
+    demand_signals: list[PricingDemandSignal],
     performance: dict,
 ) -> float:
     market_score = min(0.42, market.sample_size * 0.025 + market.source_count * 0.05)
     extraction_score = market.avg_extraction_confidence * 0.22
     occupancy_score = 0.16 if occupancy else 0
     event_score = 0.08 if events else 0
+    demand_score = min(0.08, len(demand_signals) * 0.025)
     performance_score = (
         0.10 if performance.get("nights", 0) >= 20 else 0.03 if performance.get("nights", 0) else 0
     )
     return (
-        0.18 + market_score + extraction_score + occupancy_score + event_score + performance_score
+        0.18
+        + market_score
+        + extraction_score
+        + occupancy_score
+        + event_score
+        + demand_score
+        + performance_score
     )
 
 
@@ -849,11 +1076,116 @@ def _percentile(values: list[int], percentile: float) -> int | None:
     return values[index]
 
 
+def _compact_llm_context(context: dict) -> dict:
+    return {
+        "stay_date": context["stay_date"],
+        "baseline_rate_cents": context["baseline_rate_cents"],
+        "pre_ai_rate_cents": context["pre_ai_rate_cents"],
+        "property": context["property"],
+        "market": context["market"],
+        "market_booked_rate": context["market_booked_rate"],
+        "occupancy": context["occupancy"],
+        "events": context["events"][:5],
+        "demand_signals": context.get("demand_signals", [])[:6],
+        "signals": context["signals"],
+        "multipliers": context["multipliers"],
+        "historical_performance": context["historical_performance"],
+    }
+
+
+def _normalize_llm_advice(parsed: dict, fallback: dict) -> dict:
+    rate_bias = _bounded_float(parsed.get("rate_bias"), -0.08, 0.08, fallback["rate_bias"])
+    confidence_bias = _bounded_float(
+        parsed.get("confidence_bias"),
+        -0.12,
+        0.12,
+        fallback["confidence_bias"],
+    )
+    risk_flags = parsed.get("risk_flags")
+    evidence_used = parsed.get("evidence_used")
+    return {
+        "rate_bias": rate_bias,
+        "confidence_bias": confidence_bias,
+        "summary": _string_or_default(parsed.get("summary"), fallback["summary"], 260),
+        "risk_flags": risk_flags if isinstance(risk_flags, list) else fallback["risk_flags"],
+        "demand_read": _string_or_default(parsed.get("demand_read"), fallback["demand_read"], 120),
+        "strategy": _string_or_default(parsed.get("strategy"), fallback["strategy"], 220),
+        "evidence_used": evidence_used if isinstance(evidence_used, list) else fallback["evidence_used"],
+    }
+
+
+def _bounded_float(value: object, minimum: float, maximum: float, default: float) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(number) or math.isinf(number):
+        return default
+    return round(max(minimum, min(maximum, number)), 4)
+
+
+def _string_or_default(value: object, default: str, max_length: int) -> str:
+    if not isinstance(value, str) or not value.strip():
+        return default
+    return value.strip()[:max_length]
+
+
+def _demand_read_from_context(context: dict) -> str:
+    signals = context["signals"]
+    booked = context["market_booked_rate"]
+    if booked.get("booked_rate_cents") and booked.get("market_occupancy", 0) >= 0.75:
+        return "paid demand is strong"
+    if signals.get("flight_pressure", 0) >= 0.08:
+        return "flight demand is building"
+    if signals.get("weather_pressure", 0) >= 0.06:
+        return "weather is helping demand"
+    if signals.get("weather_pressure", 0) <= -0.06:
+        return "weather may soften demand"
+    if signals["market_compression"] >= 0.75:
+        return "guest-visible supply is compressed"
+    if signals["live_data_quality"] < 0.45:
+        return "evidence is thin"
+    if signals["lead_time_days"] <= 7:
+        return "near-term demand window"
+    return "balanced demand"
+
+
+def _llm_evidence_used(context: dict) -> list[str]:
+    evidence = ["base rate guardrails", "seasonality", "lead time"]
+    market = context["market"]
+    booked = context["market_booked_rate"]
+    occupancy = context["occupancy"]
+    if market["sample_size"]:
+        evidence.append("live headed-browser comp rates")
+    if booked.get("booked_rate_cents"):
+        evidence.append("real booked-rate data")
+    if occupancy.get("market_occupancy") is not None or occupancy.get("pacing_ratio") is not None:
+        evidence.append("PMS occupancy and booking pace")
+    if context["events"]:
+        evidence.append("local event demand")
+    demand_signal_types = {
+        signal.get("type")
+        for signal in context.get("demand_signals", [])
+        if isinstance(signal, dict) and signal.get("type")
+    }
+    if "weather" in demand_signal_types:
+        evidence.append("weather demand signal")
+    if "flight" in demand_signal_types:
+        evidence.append("flight demand signal")
+    if "area_event" in demand_signal_types:
+        evidence.append("area event demand signal")
+    return evidence
+
+
 def _summary_from_context(context: dict) -> str:
     market = context["market"]
     signals = context["signals"]
     if market["sample_size"] == 0:
         return "Limited live comp data, so the recommendation leans on property bounds, seasonality, and pacing signals."
+    if signals.get("demand_pressure", 0) >= 0.12:
+        return "Area events, weather, or flight demand support a premium on top of the live market rate."
+    if signals.get("demand_pressure", 0) <= -0.08:
+        return "Demand signals point softer, so the recommendation avoids overpricing even when the base calendar rate is higher."
     if signals["event_strength"] >= 0.75:
         return "Strong event demand and live market compression support a premium over static calendar pricing."
     if signals["market_compression"] >= 0.70:

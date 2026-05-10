@@ -15,7 +15,14 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.db.models import Competitor, Property, ScrapeJob, ScrapeJobLog, ScrapeJobStatus
+from app.db.models import (
+    Competitor,
+    PricingDemandSignal,
+    Property,
+    ScrapeJob,
+    ScrapeJobLog,
+    ScrapeJobStatus,
+)
 from app.db.session import get_db
 from app.deps import RequestContext, get_request_context
 from app.schemas import (
@@ -48,6 +55,7 @@ from app.schemas import (
     TargetOccupancyPlanResponse,
 )
 from app.services.cache import JsonCache
+from app.services.demand_signals import refresh_live_demand_signals
 from app.services.forecast import build_rate_forecast, build_target_occupancy_plan
 from app.services.geocoding import suggest_addresses
 from app.services.market import (
@@ -340,7 +348,28 @@ def rate_forecast(
         raise HTTPException(status_code=404, detail="Property not found")
 
     observations, recommendations = get_market_rates(db, property_id)
-    forecast = build_rate_forecast(rental, recommendations, observations, months)
+    today = date.today()
+    end_date = today + timedelta(days=round(months * 30.4375))
+    refresh_live_demand_signals(db, property_id, today, end_date)
+    demand_signals = list(
+        db.scalars(
+            select(PricingDemandSignal)
+            .where(PricingDemandSignal.organization_id == context.organization_id)
+            .where(PricingDemandSignal.starts_on <= end_date)
+            .where(PricingDemandSignal.ends_on >= today)
+            .where(
+                (PricingDemandSignal.property_id.is_(None))
+                | (PricingDemandSignal.property_id == property_id)
+            )
+        ).all()
+    )
+    forecast = build_rate_forecast(
+        rental,
+        recommendations,
+        observations,
+        months,
+        demand_signals=demand_signals,
+    )
     return RateForecastResponse(
         property_id=property_id,
         months=months,

@@ -52,7 +52,19 @@ export type PricingRecommendation = {
   confidence: number | null;
   status: string;
   reason: {
-    ai_advice?: { summary?: string; risk_flags?: string[] };
+    ai_advice?: {
+      rate_bias?: number;
+      confidence_bias?: number;
+      summary?: string;
+      risk_flags?: string[];
+      provider?: string;
+      model?: string;
+      mode?: string;
+      status?: string;
+      demand_read?: string;
+      strategy?: string;
+      evidence_used?: string[];
+    };
     competitive_logic?: {
       calendar_benchmark_rate_cents?: number;
       comp_blend_rate_cents?: number;
@@ -83,8 +95,20 @@ export type PricingRecommendation = {
       market_compression?: number;
       live_data_quality?: number;
       event_strength?: number;
+      demand_pressure?: number;
+      weather_pressure?: number;
+      flight_pressure?: number;
       lead_time_days?: number;
     };
+    demand_signals?: Array<{
+      type?: string;
+      label?: string;
+      demand_score?: number;
+      rate_impact_percent?: number | null;
+      effective_impact_percent?: number;
+      confidence?: number;
+      source?: string;
+    }>;
     [key: string]: unknown;
   };
 };

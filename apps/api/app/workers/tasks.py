@@ -34,6 +34,7 @@ from app.db.models import (
     RateObservation,
     PmsConnection,
     PmsConnectionStatus,
+    Property,
     PropertyPmsMapping,
     ScrapeJob,
     ScrapeJobLog,
@@ -44,6 +45,7 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal
 from app.services.cache import JsonCache
+from app.services.demand_signals import refresh_live_demand_signals as refresh_property_demand_signals
 from app.services.direct_ota import PLATFORM_LOGIN_URLS, DirectOTAPusher
 from app.services.pms import PmsConnectorRegistry
 from app.services.pricing_engine import generate_recommendations
@@ -603,6 +605,50 @@ def run_scheduled_market_scans() -> dict:
             queued += 1
         db.commit()
         return {"queued": queued}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.workers.tasks.refresh_live_demand_signals")
+def refresh_live_demand_signals() -> dict:
+    db = SessionLocal()
+    refreshed = 0
+    created = 0
+    provider_counts: dict[str, int] = {}
+    try:
+        today = date.today()
+        end_date = today + timedelta(days=180)
+        properties = db.scalars(
+            select(Property)
+            .where(Property.active.is_(True))
+            .order_by(Property.created_at.asc())
+            .limit(500)
+        ).all()
+        for rental in properties:
+            result = refresh_property_demand_signals(db, rental.id, today, end_date)
+            refreshed += 1
+            created += result.created_count
+            for provider, detail in result.providers.items():
+                if detail.get("status") == "succeeded":
+                    provider_counts[provider] = provider_counts.get(provider, 0) + 1
+            generate_recommendations(
+                db,
+                rental.id,
+                start_date=today,
+                end_date=today + timedelta(days=180),
+                refresh_demand=False,
+            )
+            JsonCache().delete(f"market-rates:{rental.id}")
+        db.commit()
+        return {
+            "status": "succeeded",
+            "properties_refreshed": refreshed,
+            "signals_created": created,
+            "provider_success_counts": provider_counts,
+        }
+    except Exception as exc:
+        db.rollback()
+        return {"status": "failed", "error": str(exc)}
     finally:
         db.close()
 

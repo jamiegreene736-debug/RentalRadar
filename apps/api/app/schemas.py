@@ -621,6 +621,44 @@ class LocalEventResponse(BaseModel):
     demand_score: float
 
 
+class PricingDemandSignalCreate(BaseModel):
+    property_id: UUID | None = None
+    signal_type: str = Field(pattern="^(area_event|weather|flight|market|holiday|custom)$")
+    label: str = Field(min_length=2)
+    starts_on: date
+    ends_on: date
+    demand_score: float = Field(default=0.5, ge=0, le=1)
+    rate_impact_percent: float | None = Field(default=None, ge=-0.5, le=0.5)
+    confidence: float = Field(default=0.65, ge=0, le=1)
+    source: str = "manual"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class PricingDemandSignalResponse(BaseModel):
+    id: UUID
+    property_id: UUID | None
+    signal_type: str
+    label: str
+    starts_on: date
+    ends_on: date
+    demand_score: float
+    rate_impact_percent: float | None
+    confidence: float
+    source: str
+
+
+class PricingDemandSignalRefreshRequest(BaseModel):
+    property_id: UUID
+    start_date: date | None = None
+    end_date: date | None = None
+
+
+class PricingDemandSignalRefreshResponse(BaseModel):
+    property_id: UUID
+    created_count: int
+    providers: dict[str, Any]
+
+
 class OccupancySignalCreate(BaseModel):
     property_id: UUID
     stay_date: date

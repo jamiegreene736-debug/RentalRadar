@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from uuid import UUID
 
-from app.db.models import PricingRecommendation, Property, RateObservation
+from app.db.models import PricingDemandSignal, PricingRecommendation, Property, RateObservation
 from app.services.pricing_controls import pricing_controls_for_property
 
 
@@ -148,6 +148,7 @@ def build_rate_forecast(
     recommendations: list[PricingRecommendation],
     observations: list[RateObservation],
     months: int,
+    demand_signals: list[PricingDemandSignal] | None = None,
 ) -> ForecastResult:
     horizon_months = max(6, min(months, 24))
     today = date.today()
@@ -160,7 +161,13 @@ def build_rate_forecast(
     confidence = _confidence(recommendations, observations)
     market_sources = _market_source_evidence(observations)
     base_rate_model = _base_rate_model(rental, observations, market_sources, base_rate)
-    adjustment_layers = _pricing_layers(rental, observations, base_rate, confidence)
+    adjustment_layers = _pricing_layers(
+        rental,
+        observations,
+        base_rate,
+        confidence,
+        demand_signals or [],
+    )
     pricing_tools = _pricing_tool_coverage(rental, observations, base_rate)
 
     nights: list[ForecastNight] = []
@@ -212,7 +219,7 @@ def build_rate_forecast(
         confidence=confidence,
         explanation=(
             "Base rate is anchored to live OTA market evidence when available, then adjusted by booking pickup, "
-            "review quality, seasonality, lead time, calendar gaps, and owner guardrails before nightly rates are pushed."
+            "review quality, seasonality, lead time, local demand, weather, flights, calendar gaps, and owner guardrails before nightly rates are pushed."
         ),
         base_rate_model=base_rate_model,
         market_sources=market_sources,
@@ -452,6 +459,7 @@ def _pricing_layers(
     observations: list[RateObservation],
     base_rate: int,
     confidence: float,
+    demand_signals: list[PricingDemandSignal],
 ) -> list[PricingAdjustmentLayer]:
     observed_boost = min(0.06, len(observations) / 250 * 0.06)
     bedrooms = rental.bedrooms or 2
@@ -502,12 +510,13 @@ def _pricing_layers(
             "seasonality",
             "Season and weekday shape",
             "Demand",
-            "RentalRadar season calendar, local events, day-of-week demand",
+            "RentalRadar season calendar, holidays, day-of-week demand",
             0.075,
             0.69,
             "active_model",
             "Raises peak summer, holiday, and weekend dates while softening shoulder-season weekdays.",
         ),
+        *_demand_layer_specs(demand_signals),
         (
             "calendar_shape",
             "Gap nights and min-stay friction",
@@ -543,6 +552,85 @@ def _pricing_layers(
         )
         for code, label, category, data_feed, adjustment, layer_confidence, status, description in layer_specs
     ]
+
+
+def _demand_layer_specs(
+    demand_signals: list[PricingDemandSignal],
+) -> list[tuple[str, str, str, str, float, float, str, str]]:
+    if not demand_signals:
+        return [
+            (
+                "local_demand",
+                "Area events, weather, and flights",
+                "Demand",
+                "Manual entries now; can connect event, weather, and airport-demand APIs next",
+                0.0,
+                0.38,
+                "ready_for_inputs",
+                "Adds premiums or softens rates when the local market has big events, helpful or risky weather, or unusually busy travel days.",
+            )
+        ]
+
+    specs = []
+    labels = {
+        "area_event": "Area events",
+        "weather": "Weather outlook",
+        "flight": "Flight demand",
+    }
+    feeds = {
+        "area_event": "Event calendar/API: nearby festivals, sports, conferences, school breaks, and ticketed events",
+        "weather": "Weather API: forecast, severe-weather risk, beach/pool-friendly days, and travel disruption risk",
+        "flight": "Airport demand API: flight arrivals, load factor or seat capacity, fare pressure, and airport crowding",
+    }
+    descriptions = {
+        "area_event": "Raises rates when nearby events can fill the market and flags weak event periods before rates get too aggressive.",
+        "weather": "Uses good vacation weather as a pricing tailwind and reduces confidence when storms or poor travel weather may hurt bookings.",
+        "flight": "Treats busy arrival periods as a sign more guests are coming into the area and slow air-travel periods as softer demand.",
+    }
+    for signal_type in ("area_event", "weather", "flight"):
+        signals = [signal for signal in demand_signals if signal.signal_type == signal_type]
+        if not signals:
+            specs.append(
+                (
+                    signal_type,
+                    labels[signal_type],
+                    "Demand",
+                    feeds[signal_type],
+                    0.0,
+                    0.42,
+                    "awaiting_feed",
+                    descriptions[signal_type],
+                )
+            )
+            continue
+        adjustment = _combined_signal_adjustment(signals)
+        confidence = sum(float(signal.confidence) for signal in signals) / len(signals)
+        specs.append(
+            (
+                signal_type,
+                labels[signal_type],
+                "Demand",
+                feeds[signal_type],
+                adjustment,
+                min(0.92, max(0.45, confidence)),
+                "active" if any(signal.source != "manual" for signal in signals) else "manual_active",
+                descriptions[signal_type],
+            )
+        )
+    return specs
+
+
+def _combined_signal_adjustment(signals: list[PricingDemandSignal]) -> float:
+    total = 0.0
+    for signal in signals:
+        if signal.rate_impact_percent is not None:
+            impact = float(signal.rate_impact_percent)
+        else:
+            caps = {"area_event": 0.16, "weather": 0.08, "flight": 0.10}
+            impact = (float(signal.demand_score) - 0.5) * 2 * caps.get(signal.signal_type, 0.07)
+        confidence = max(0.0, min(1.0, float(signal.confidence)))
+        total += impact * (0.55 + confidence * 0.45)
+    return round(max(-0.16, min(0.20, total)), 4)
 
 
 def _pricing_tool_coverage(

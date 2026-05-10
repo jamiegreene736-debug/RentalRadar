@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +13,7 @@ from app.db.models import (
     PmsConnection,
     PmsConnectionStatus,
     PricingExperiment,
+    PricingDemandSignal,
     PricingPerformanceEvent,
     Property,
     RatePush,
@@ -23,6 +25,10 @@ from app.schemas import (
     LocalEventResponse,
     OccupancySignalCreate,
     OccupancySignalResponse,
+    PricingDemandSignalCreate,
+    PricingDemandSignalRefreshRequest,
+    PricingDemandSignalRefreshResponse,
+    PricingDemandSignalResponse,
     PricingExperimentCreate,
     PricingExperimentResponse,
     PricingExperimentResultsResponse,
@@ -34,6 +40,7 @@ from app.schemas import (
     PricingRunRequest,
     PricingRunResponse,
 )
+from app.services.demand_signals import refresh_live_demand_signals
 from app.services.pricing_engine import experiment_results, generate_recommendations
 from app.services.usage import UsageLimitExceeded, require_usage_allowance
 from app.workers.tasks import push_rate_to_pms
@@ -72,6 +79,69 @@ def create_local_event(
         starts_on=event.starts_on,
         ends_on=event.ends_on,
         demand_score=float(event.demand_score),
+    )
+
+
+@router.post("/pricing/demand-signals", response_model=PricingDemandSignalResponse, status_code=201)
+def create_pricing_demand_signal(
+    payload: PricingDemandSignalCreate,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> PricingDemandSignalResponse:
+    if payload.property_id is not None:
+        _get_property(db, payload.property_id, context.organization_id)
+    if payload.ends_on < payload.starts_on:
+        raise HTTPException(status_code=400, detail="ends_on must be on or after starts_on")
+
+    signal = PricingDemandSignal(
+        organization_id=context.organization_id,
+        property_id=payload.property_id,
+        signal_type=payload.signal_type,
+        label=payload.label,
+        starts_on=payload.starts_on,
+        ends_on=payload.ends_on,
+        demand_score=payload.demand_score,
+        rate_impact_percent=payload.rate_impact_percent,
+        confidence=payload.confidence,
+        source=payload.source,
+        metadata_=payload.metadata,
+    )
+    db.add(signal)
+    db.commit()
+    db.refresh(signal)
+    return PricingDemandSignalResponse(
+        id=signal.id,
+        property_id=signal.property_id,
+        signal_type=signal.signal_type,
+        label=signal.label,
+        starts_on=signal.starts_on,
+        ends_on=signal.ends_on,
+        demand_score=float(signal.demand_score),
+        rate_impact_percent=float(signal.rate_impact_percent)
+        if signal.rate_impact_percent is not None
+        else None,
+        confidence=float(signal.confidence),
+        source=signal.source,
+    )
+
+
+@router.post("/pricing/demand-signals/refresh", response_model=PricingDemandSignalRefreshResponse)
+def refresh_pricing_demand_signals(
+    payload: PricingDemandSignalRefreshRequest,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> PricingDemandSignalRefreshResponse:
+    rental = _get_property(db, payload.property_id, context.organization_id)
+    start_date = payload.start_date or date.today()
+    end_date = payload.end_date or start_date + timedelta(days=90)
+    if end_date < start_date:
+        raise HTTPException(status_code=400, detail="end_date must be on or after start_date")
+    result = refresh_live_demand_signals(db, rental.id, start_date, end_date)
+    db.commit()
+    return PricingDemandSignalRefreshResponse(
+        property_id=result.property_id,
+        created_count=result.created_count,
+        providers=result.providers,
     )
 
 
