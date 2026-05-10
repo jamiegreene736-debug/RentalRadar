@@ -50,6 +50,7 @@ from app.schemas import (
     HolidayWindowResponse,
     BrowserEvidenceResponse,
     MarketScanResponse,
+    SourceCheckResponse,
     TargetOccupancyNightResponse,
     TargetOccupancyPlanRequest,
     TargetOccupancyPlanResponse,
@@ -66,6 +67,7 @@ from app.services.market import (
     infer_source,
 )
 from app.services.pricing_controls import apply_pricing_control_update, pricing_controls_for_property
+from app.services.pricing_engine import generate_recommendations
 from app.services.season_calendar import month_names, season_profile_for_property
 from app.services.usage import BillingRequired, UsageLimitExceeded, ensure_property_allowed, require_usage_allowance
 from app.workers.tasks import run_scrape_job
@@ -213,6 +215,55 @@ def queue_market_scan(
             "An active scan is already running for this property."
             if not queued_job_ids
             else f"Queued {len(queued_job_ids)} headed-browser market scan{'' if len(queued_job_ids) == 1 else 's'}."
+        ),
+    )
+
+
+@router.post("/properties/{property_id}/source-check", response_model=SourceCheckResponse)
+def check_all_pricing_sources(
+    property_id: UUID,
+    months: int = Query(default=6, ge=6, le=24),
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> SourceCheckResponse:
+    rental = db.scalar(
+        select(Property)
+        .where(Property.id == property_id)
+        .where(Property.organization_id == context.organization_id)
+        .where(Property.active.is_(True))
+    )
+    if rental is None:
+        raise HTTPException(status_code=404, detail="Property not found")
+
+    scan_days = min(365, max(90, round(months * 30.4375)))
+    queued_job_ids = _queue_property_market_scans(
+        db=db,
+        rental=rental,
+        scan_days=scan_days,
+        context=context,
+        trigger="manual_source_check",
+        months_ahead=months,
+    )
+    today = date.today()
+    end_date = today + timedelta(days=scan_days)
+    demand_result = refresh_live_demand_signals(db, property_id, today, end_date)
+    recommendations = generate_recommendations(
+        db,
+        property_id,
+        start_date=today,
+        end_date=end_date,
+        refresh_demand=False,
+    )
+    JsonCache().delete(f"market-rates:{property_id}")
+    return SourceCheckResponse(
+        property_id=property_id,
+        queued_job_ids=queued_job_ids,
+        demand_signal_count=demand_result.created_count,
+        pricing_recommendation_count=len(recommendations),
+        providers=demand_result.providers,
+        message=(
+            "Checked live OTA scans and refreshed event, weather, and flight demand data. "
+            "New browser scans will continue updating recommendations as they finish."
         ),
     )
 
@@ -723,9 +774,10 @@ def _queue_property_market_scans(
     scan_days: int,
     context: RequestContext,
     trigger: str,
+    months_ahead: int = 24,
 ) -> list[UUID]:
     address = rental.formatted_address or rental.address_line1
-    targets = default_seasonal_market_targets(address, months_ahead=24, stay_nights=7)
+    targets = default_seasonal_market_targets(address, months_ahead=months_ahead, stay_nights=7)
 
     jobs: list[ScrapeJob] = []
     active_job_ids: list[UUID] = []

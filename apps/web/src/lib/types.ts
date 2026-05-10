@@ -300,6 +300,15 @@ export type RateForecastResponse = {
   nights: RateForecastNight[];
 };
 
+export type SourceCheckResponse = {
+  property_id: string;
+  queued_job_ids: string[];
+  demand_signal_count: number;
+  pricing_recommendation_count: number;
+  providers: Record<string, { status?: string; message?: string; created_count?: number; source?: string; [key: string]: unknown }>;
+  message: string;
+};
+
 export type TargetOccupancyNight = {
   stay_date: string;
   suggested_rate_cents: number;

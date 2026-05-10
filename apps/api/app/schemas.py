@@ -85,6 +85,15 @@ class MarketScanResponse(BaseModel):
     message: str
 
 
+class SourceCheckResponse(BaseModel):
+    property_id: UUID
+    queued_job_ids: list[UUID]
+    demand_signal_count: int
+    pricing_recommendation_count: int
+    providers: dict[str, Any]
+    message: str
+
+
 class CancelMarketScanResponse(BaseModel):
     property_id: UUID
     canceled_job_ids: list[UUID]

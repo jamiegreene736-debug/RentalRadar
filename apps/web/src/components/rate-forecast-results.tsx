@@ -1,20 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   CalendarRange,
+  CheckCircle2,
   CircleDollarSign,
   Database,
   Gauge,
   Layers3,
   LoaderCircle,
   Percent,
+  RefreshCw,
+  RadioTower,
   TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { MarketSourceEvidence, PricingAdjustmentLayer, RateForecastResponse } from "@/lib/types";
+import { MarketSourceEvidence, PricingAdjustmentLayer, RateForecastResponse, SourceCheckResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const horizons = [6, 12, 24] as const;
@@ -24,9 +27,34 @@ export function RateForecastResults({ propertyId, view = "full" }: { propertyId?
   const [months, setMonths] = useState<(typeof horizons)[number]>(6);
   const [forecast, setForecast] = useState<RateForecastResponse | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [sourceCheck, setSourceCheck] = useState<{
+    status: "idle" | "checking" | "ready" | "error";
+    message?: string;
+    result?: SourceCheckResponse;
+  }>({ status: "idle" });
   const showMarket = view === "full" || view === "market";
   const showStack = view === "full" || view === "stack";
   const showSuggested = view === "full" || view === "suggested";
+
+  const loadForecast = useCallback(async () => {
+    if (!propertyId) {
+      setForecast(null);
+      setStatus("idle");
+      return;
+    }
+
+    setStatus("loading");
+    const response = await fetch(`/api/backend/properties/${propertyId}/rate-forecast?months=${months}`, {
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`Forecast failed: ${response.status}`);
+    const payload = (await response.json()) as RateForecastResponse;
+    setForecast(payload);
+    setStatus("ready");
+  }, [months, propertyId]);
 
   useEffect(() => {
     if (!propertyId) {
@@ -36,31 +64,19 @@ export function RateForecastResults({ propertyId, view = "full" }: { propertyId?
     }
 
     let cancelled = false;
-    async function loadForecast() {
+    async function load() {
       try {
-        setStatus("loading");
-        const response = await fetch(`/api/backend/properties/${propertyId}/rate-forecast?months=${months}`, {
-          headers: {
-            Accept: "application/json",
-          },
-          cache: "no-store",
-        });
-        if (!response.ok) throw new Error(`Forecast failed: ${response.status}`);
-        const payload = (await response.json()) as RateForecastResponse;
-        if (!cancelled) {
-          setForecast(payload);
-          setStatus("ready");
-        }
+        await loadForecast();
       } catch {
         if (!cancelled) setStatus("error");
       }
     }
 
-    void loadForecast();
+    void load();
     return () => {
       cancelled = true;
     };
-  }, [months, propertyId]);
+  }, [loadForecast, propertyId]);
 
   const monthly = forecast?.monthly ?? [];
   const maxRevenue = Math.max(
@@ -75,6 +91,29 @@ export function RateForecastResults({ propertyId, view = "full" }: { propertyId?
     );
   }, [forecast]);
 
+  async function checkAllSources() {
+    if (!propertyId) return;
+    try {
+      setSourceCheck({ status: "checking", message: "Checking OTA scans and live demand APIs..." });
+      const response = await fetch(`/api/backend/properties/${propertyId}/source-check?months=${months}`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(`Source check failed: ${response.status}`);
+      const result = (await response.json()) as SourceCheckResponse;
+      setSourceCheck({ status: "ready", message: result.message, result });
+      await loadForecast();
+    } catch {
+      setSourceCheck({
+        status: "error",
+        message: "Unable to check every source right now. The existing scan queue can keep running while you retry.",
+      });
+    }
+  }
+
   if (!propertyId) return null;
 
   return (
@@ -88,20 +127,31 @@ export function RateForecastResults({ propertyId, view = "full" }: { propertyId?
               "RentalRadar is preparing the market evidence, base-rate model, and rate adjustment stack for this property."}
           </p>
         </div>
-        <div className="flex rounded-lg border border-cyan-900/10 bg-white p-1 shadow-sm">
-          {horizons.map((horizon) => (
-            <button
-              key={horizon}
-              type="button"
-              onClick={() => setMonths(horizon)}
-              className={cn(
-                "h-10 rounded-md px-4 text-sm font-medium transition",
-                months === horizon ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white",
-              )}
-            >
-              {horizon} mo
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={checkAllSources}
+            disabled={sourceCheck.status === "checking"}
+            className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            <RefreshCw className={cn("size-4", sourceCheck.status === "checking" ? "animate-spin" : "")} />
+            Check all sources
+          </button>
+          <div className="flex rounded-lg border border-cyan-900/10 bg-white p-1 shadow-sm">
+            {horizons.map((horizon) => (
+              <button
+                key={horizon}
+                type="button"
+                onClick={() => setMonths(horizon)}
+                className={cn(
+                  "h-10 rounded-md px-4 text-sm font-medium transition",
+                  months === horizon ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white",
+                )}
+              >
+                {horizon} mo
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -125,6 +175,10 @@ export function RateForecastResults({ propertyId, view = "full" }: { propertyId?
             <Metric icon={Percent} label="Estimated occupancy" value={percent(forecast.estimated_occupancy)} />
             <Metric icon={TrendingUp} label="Projected lift" value={money(forecast.extra_income_vs_market_cents)} />
             </div>
+          ) : null}
+
+          {showSuggested ? (
+            <SourceCoveragePanel forecast={forecast} sourceCheck={sourceCheck} />
           ) : null}
 
           {showMarket ? (
@@ -256,6 +310,108 @@ function forecastTitle(view: ForecastView) {
   if (view === "stack") return { eyebrow: "Rate Stack", title: "How the nightly rate is built" };
   if (view === "market") return { eyebrow: "Market Evidence", title: "Live OTA evidence and base-rate model" };
   return { eyebrow: "Suggested Rates", title: "AI market pricing model" };
+}
+
+function SourceCoveragePanel({
+  forecast,
+  sourceCheck,
+}: {
+  forecast: RateForecastResponse;
+  sourceCheck: {
+    status: "idle" | "checking" | "ready" | "error";
+    message?: string;
+    result?: SourceCheckResponse;
+  };
+}) {
+  const liveOtaCount = forecast.market_sources.filter((source) => source.sample_count > 0).length;
+  const demandLayers = forecast.adjustment_layers.filter((layer) => ["area_event", "weather", "flight"].includes(layer.code));
+  const activeApiCount = demandLayers.filter((layer) => layer.status === "active" || layer.status === "manual_active").length;
+  const checkResult = sourceCheck.result;
+  return (
+    <Panel>
+      <PanelHeader
+        icon={RadioTower}
+        eyebrow="Source check"
+        title="OTA scans and live demand APIs"
+        aside={
+          sourceCheck.status === "checking"
+            ? "Checking now"
+            : `OTA ${liveOtaCount}/3 live · API ${activeApiCount}/3 active`
+        }
+      />
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-sm font-semibold text-slate-950">OTA browser scans</p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {forecast.market_sources.map((source) => (
+              <SourceChip
+                key={source.source}
+                label={source.label}
+                active={source.sample_count > 0}
+                detail={source.sample_count > 0 ? `${source.sample_count} samples` : "Queued or waiting"}
+              />
+            ))}
+          </div>
+          <p className="text-xs leading-5 text-slate-500">
+            The button queues headed browser checks for Airbnb, VRBO, and Booking.com across the selected forecast window.
+          </p>
+        </div>
+        <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-sm font-semibold text-slate-950">API demand data</p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {demandLayers.map((layer) => (
+              <SourceChip
+                key={layer.code}
+                label={layer.label}
+                active={layer.status === "active" || layer.status === "manual_active"}
+                detail={apiLayerDetail(layer, checkResult)}
+              />
+            ))}
+          </div>
+          <p className="text-xs leading-5 text-slate-500">
+            This includes weather, nearby events, and flight pressure when provider keys are available.
+          </p>
+        </div>
+      </div>
+      {sourceCheck.message ? (
+        <p
+          className={cn(
+            "mt-3 rounded-lg border p-3 text-sm leading-6",
+            sourceCheck.status === "error"
+              ? "border-rose-200 bg-rose-50 text-rose-700"
+              : "border-cyan-900/10 bg-cyan-50/70 text-cyan-950",
+          )}
+        >
+          {sourceCheck.message}
+          {checkResult?.queued_job_ids.length ? ` ${checkResult.queued_job_ids.length} browser scan${checkResult.queued_job_ids.length === 1 ? "" : "s"} queued.` : ""}
+          {typeof checkResult?.demand_signal_count === "number" ? ` ${checkResult.demand_signal_count} API signal${checkResult.demand_signal_count === 1 ? "" : "s"} refreshed.` : ""}
+        </p>
+      ) : null}
+    </Panel>
+  );
+}
+
+function SourceChip({ label, active, detail }: { label: string; active: boolean; detail: string }) {
+  return (
+    <div className="rounded-lg border border-white bg-white p-3 shadow-sm">
+      <div className="flex items-center gap-2">
+        <CheckCircle2 className={cn("size-4", active ? "text-emerald-600" : "text-slate-300")} />
+        <p className="min-w-0 truncate text-sm font-semibold text-slate-950">{label}</p>
+      </div>
+      <p className="mt-1 text-xs text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+function apiLayerDetail(layer: PricingAdjustmentLayer, result?: SourceCheckResponse) {
+  const providerKey = layer.code === "area_event" ? "events" : layer.code === "flight" ? "flights" : layer.code;
+  const provider = result?.providers?.[providerKey];
+  if (provider?.status === "missing_key") return "Needs API key";
+  if (provider?.status === "disabled") return "Needs provider";
+  if (provider?.status === "succeeded") return `${provider.created_count ?? 0} signals`;
+  if (layer.status === "active" || layer.status === "manual_active") return signedPercent(layer.adjustment_percent);
+  if (layer.status === "awaiting_feed") return "Waiting for feed";
+  return statusLabel(layer.status);
 }
 
 function Metric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
