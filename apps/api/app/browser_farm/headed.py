@@ -98,6 +98,8 @@ async def launch_headed_browser(
             "--no-default-browser-check",
             "--password-store=basic",
             "--use-mock-keychain",
+            "--ignore-certificate-errors",
+            "--ignore-certificate-errors-spki-list",
             f"--window-size={profile.viewport['width']},{profile.viewport['height']}",
         ]
         launch_kwargs = {
@@ -124,7 +126,7 @@ async def launch_headed_browser(
             color_scheme="light",
             storage_state=storage_state,
             java_script_enabled=True,
-            ignore_https_errors=False,
+            ignore_https_errors=True,
         )
         await apply_stealth_patches(context, profile)
         page = await context.new_page()

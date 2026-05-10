@@ -45,6 +45,16 @@ async def run_trained_scraping_script(
             return _to_execution_result(payload, target, strategy)
         except Exception as exc:
             await session.action_logger.screenshot(session.page, "scrape.exception")
+            if "ERR_CERT_AUTHORITY_INVALID" in str(exc):
+                session.action_logger.write(
+                    "scrape.proxy_tls_error",
+                    {
+                        "message": "Chrome rejected the residential proxy TLS certificate while loading the OTA page.",
+                        "url": session.page.url,
+                        "target_url": target.url,
+                        "exception_type": type(exc).__name__,
+                    },
+                )
             session.action_logger.write(
                 "scrape.exception",
                 {
