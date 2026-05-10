@@ -18,8 +18,11 @@ from app.db.session import SessionLocal
 DB_EVENT_ALLOWLIST = {
     "browser.launched",
     "browser.shutdown",
+    "scrape.blocker_detected",
     "scrape.canceled",
+    "scrape.exception",
     "scrape.page_loaded",
+    "scrape.selector_missing",
     "scrape.live_screenshot",
     "scrape.screenshot",
     "scrape.completed",
@@ -110,7 +113,7 @@ class BrowserActionLogger:
             db.add(
                 ScrapeJobLog(
                     scrape_job_id=job_id,
-                    level="error" if event.endswith(".failed") or event == "pageerror" else "info",
+                    level=_event_level(event),
                     event=event,
                     message=_event_message(event, payload),
                     payload=_safe_payload(payload),
@@ -171,6 +174,12 @@ def _event_message(event: str, payload: dict[str, Any]) -> str | None:
         return "Chrome session opened."
     if event in {"scrape.page_loaded", "scrape.live_screenshot", "scrape.screenshot"}:
         return "Chrome screen preview captured."
+    if event == "scrape.blocker_detected":
+        return str(payload.get("message") or "Browser blocker detected.")
+    if event == "scrape.selector_missing":
+        return str(payload.get("message") or "Expected selector was not found.")
+    if event == "scrape.exception":
+        return str(payload.get("message") or "Playwright raised an exception.")
     if event == "scrape.completed":
         return "Extraction run finished."
     if event == "scrape.canceled":
@@ -182,3 +191,11 @@ def _event_message(event: str, payload: dict[str, Any]) -> str | None:
     if "url" in payload:
         return _safe_url(str(payload["url"]))
     return None
+
+
+def _event_level(event: str) -> str:
+    if event in {"scrape.exception", "pageerror"} or event.endswith(".failed"):
+        return "error"
+    if event in {"scrape.blocker_detected", "scrape.selector_missing", "scrape.canceled"}:
+        return "warning"
+    return "info"

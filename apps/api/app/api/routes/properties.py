@@ -711,6 +711,9 @@ def _scrape_session_response(db: Session, job: ScrapeJob, queue_position: int | 
         completed_at=job.completed_at,
         current_url=current_url,
         latest_screenshot_data_url=latest_screenshot_data_url,
+        error_code=job.error_code,
+        error_message=job.error_message,
+        diagnostics=_scrape_diagnostics(job, merged_events),
         progress_percent=_scrape_progress_percent(job, merged_events, latest_screenshot_data_url, queue_position),
         progress_label=_scrape_progress_label(job, merged_events, queue_position),
         queue_position=queue_position,
@@ -791,8 +794,11 @@ def _has_browser_evidence(
 ) -> bool:
     evidence_events = {
         "browser.launched",
+        "scrape.blocker_detected",
+        "scrape.exception",
         "scrape.page_loaded",
         "scrape.live_screenshot",
+        "scrape.selector_missing",
         "scrape.screenshot",
         "scrape.completed",
         "screenshot.failed",
@@ -816,6 +822,7 @@ def _db_scrape_events(db: Session, job_id: UUID) -> list[ScrapeSessionEventRespo
             message=log.message,
             url=_safe_url(str(log.payload.get("url"))) if isinstance(log.payload, dict) and log.payload.get("url") else None,
             status=log.payload.get("status") if isinstance(log.payload, dict) and isinstance(log.payload.get("status"), int) else None,
+            payload=_safe_payload(log.payload) if isinstance(log.payload, dict) else None,
         )
         for log in logs
     ]
@@ -840,10 +847,11 @@ def _browser_action_events(job_id: str) -> list[ScrapeSessionEventResponse]:
             ScrapeSessionEventResponse(
                 at=event_at,
                 event=event_name,
-                level="error" if event_name.endswith("failed") or event_name == "pageerror" else "info",
+                level=_event_level(event_name),
                 message=message,
                 url=_safe_url(str(payload["url"])) if payload.get("url") else None,
                 status=payload.get("status") if isinstance(payload.get("status"), int) else None,
+                payload=_safe_payload(payload),
             )
         )
     return sorted(events, key=lambda item: item.at, reverse=True)
@@ -876,6 +884,12 @@ def _event_message(event: str, payload: dict[str, Any]) -> str | None:
         return f"HTTP {payload.get('status')} {_safe_url(str(payload.get('url', '')))}"
     if event in {"scrape.page_loaded", "scrape.live_screenshot", "scrape.screenshot"}:
         return "Screen preview updated"
+    if event == "scrape.blocker_detected":
+        return str(payload.get("message") or "Browser blocker detected")
+    if event == "scrape.selector_missing":
+        return str(payload.get("message") or "Expected selector was not found")
+    if event == "scrape.exception":
+        return str(payload.get("message") or "Playwright raised an exception")
     if event == "scrape.completed":
         return "Extraction run finished"
     if event == "browser.shutdown":
@@ -883,6 +897,14 @@ def _event_message(event: str, payload: dict[str, Any]) -> str | None:
     if "message" in payload:
         return str(payload["message"])
     return None
+
+
+def _event_level(event: str) -> str:
+    if event in {"scrape.exception", "pageerror"} or event.endswith("failed"):
+        return "error"
+    if event in {"scrape.blocker_detected", "scrape.selector_missing", "scrape.canceled", "scrape.needs_review"}:
+        return "warning"
+    return "info"
 
 
 def _latest_screenshot_data_url(job: ScrapeJob) -> str | None:
@@ -899,7 +921,7 @@ def _latest_screenshot_data_url(job: ScrapeJob) -> str | None:
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if record.get("event") not in {"scrape.page_loaded", "scrape.live_screenshot", "scrape.screenshot"}:
+        if record.get("event") not in {"scrape.page_loaded", "scrape.live_screenshot", "scrape.screenshot", "scrape.blocker_detected", "scrape.exception", "scrape.selector_missing"}:
             continue
         payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
         screenshot_path = payload.get("screenshot_path")
@@ -914,6 +936,52 @@ def _latest_screenshot_data_url(job: ScrapeJob) -> str | None:
             continue
         return f"data:image/jpeg;base64,{base64.b64encode(data).decode('ascii')}"
     return None
+
+
+def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    safe = dict(payload)
+    screenshot_path = safe.get("screenshot_path")
+    if isinstance(screenshot_path, str):
+        safe["screenshot_path"] = Path(screenshot_path).name
+    for key in ("password", "token", "authorization", "cookie"):
+        if key in safe:
+            safe[key] = "[redacted]"
+    return safe
+
+
+def _scrape_diagnostics(job: ScrapeJob, events: list[ScrapeSessionEventResponse]) -> dict[str, Any]:
+    result_summary = job.result_summary if isinstance(job.result_summary, dict) else {}
+    return {
+        "job_id": str(job.id),
+        "source": job.source.value if hasattr(job.source, "value") else str(job.source),
+        "status": job.status.value if hasattr(job.status, "value") else str(job.status),
+        "target_url": _safe_url(job.target_url),
+        "stay_date_start": job.stay_date_start.isoformat() if job.stay_date_start else None,
+        "stay_date_end": job.stay_date_end.isoformat() if job.stay_date_end else None,
+        "error_code": job.error_code,
+        "error_message": job.error_message,
+        "attempts": job.attempts,
+        "started_at": job.started_at.isoformat() if job.started_at else None,
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+        "request_context": job.request_context if isinstance(job.request_context, dict) else {},
+        "result_summary": {
+            key: value
+            for key, value in result_summary.items()
+            if key not in {"latest_screenshot_data_url"}
+        },
+        "events": [
+            {
+                "at": event.at.isoformat(),
+                "event": event.event,
+                "level": event.level,
+                "message": event.message,
+                "url": event.url,
+                "status": event.status,
+                "payload": event.payload,
+            }
+            for event in events[:8]
+        ],
+    }
 
 
 def _is_inside(path: Path, root: Path) -> bool:

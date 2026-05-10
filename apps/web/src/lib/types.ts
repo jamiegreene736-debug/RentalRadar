@@ -89,6 +89,7 @@ export type ScrapeSessionEvent = {
   message: string | null;
   url: string | null;
   status: number | null;
+  payload: Record<string, unknown> | null;
 };
 
 export type ScrapeSession = {
@@ -102,6 +103,9 @@ export type ScrapeSession = {
   completed_at: string | null;
   current_url: string | null;
   latest_screenshot_data_url: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  diagnostics: Record<string, unknown>;
   progress_percent: number;
   progress_label: string;
   queue_position: number | null;

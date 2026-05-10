@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Chrome, Circle, Clock3, LoaderCircle, RefreshCw, Square, Terminal } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, Chrome, Circle, Clipboard, Clock3, LoaderCircle, RefreshCw, Square, Terminal, X } from "lucide-react";
 
 import { ScrapeSession, ScrapeSessionsResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,8 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
   const [sessions, setSessions] = useState<ScrapeSession[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "live" | "error">("idle");
   const [cancelStatus, setCancelStatus] = useState<"idle" | "stopping" | "stopped" | "error">("idle");
+  const [diagnosticSession, setDiagnosticSession] = useState<ScrapeSession | null>(null);
+  const autoOpenedDiagnostics = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!propertyId) {
@@ -64,6 +66,13 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
     };
   }, [propertyId]);
 
+  useEffect(() => {
+    const failedSession = sessions.find(isDiagnosticSession);
+    if (!failedSession || autoOpenedDiagnostics.current.has(failedSession.id)) return;
+    autoOpenedDiagnostics.current.add(failedSession.id);
+    setDiagnosticSession(failedSession);
+  }, [sessions]);
+
   if (!propertyId && !pending) return null;
 
   const activeSessions = sessions.filter((session) => ["queued", "running"].includes(session.status));
@@ -76,6 +85,7 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
   const progressPercent = hasActiveSessions || pending ? aggregateProgress(activeSessions, pending) : 0;
   const statusCopy = progressCopy(activeSessions, pending, sessions.length);
   const progressTone = hasActiveSessions || pending ? aggregateProgressTone(activeSessions, status) : "bg-slate-700";
+  const failedSession = sessions.find(isDiagnosticSession);
 
   async function stopScan() {
     if (!propertyId || !hasActiveSessions || cancelStatus === "stopping") return;
@@ -103,12 +113,13 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
   }
 
   return (
-    <section
-      className={cn(
-        "mt-5 w-full rounded-[22px] border border-cyan-900/10 bg-slate-950 p-4 shadow-[0_24px_80px_rgba(8,47,73,0.22)]",
-        className,
-      )}
-    >
+    <>
+      <section
+        className={cn(
+          "mt-5 w-full rounded-[22px] border border-cyan-900/10 bg-slate-950 p-4 shadow-[0_24px_80px_rgba(8,47,73,0.22)]",
+          className,
+        )}
+      >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-2xl bg-cyan-300 text-slate-950">
@@ -161,7 +172,7 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
         </div>
       </div>
 
-      <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-semibold text-white">{statusCopy}</p>
           <p className="text-xs font-medium text-slate-300">
@@ -185,12 +196,35 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
               ? "Past scan results are saved in Scan History. This panel only shows scans that are actively queued or running."
             : "RentalRadar will update this bar as soon as the property is created and scan jobs are returned by the API."}
         </p>
-      </div>
+        </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        {failedSession && !hasActiveSessions ? (
+          <div className="mt-4 rounded-2xl border border-rose-300/20 bg-rose-400/10 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold text-rose-50">Chrome scrape needs diagnosis</p>
+                <p className="mt-1 text-sm leading-6 text-rose-100/80">
+                  {failedSession.error_message || failedSession.progress_label || "Open the diagnostic report to see what Chrome hit."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDiagnosticSession(failedSession)}
+                className="inline-flex w-fit items-center gap-2 rounded-full border border-rose-200/30 bg-white/10 px-3 py-1.5 text-xs font-semibold text-rose-50 transition hover:bg-white/15"
+              >
+                <AlertTriangle className="size-3.5" />
+                Open diagnostic
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
         {hasActiveSessions ? (
           <>
-            {visibleSessions.map((session) => <BrowserMiniScreen key={session.id} session={session} />)}
+            {visibleSessions.map((session) => (
+              <BrowserMiniScreen key={session.id} session={session} onOpenDiagnostic={() => setDiagnosticSession(session)} />
+            ))}
             {hiddenActiveCount ? <QueuedSummary count={hiddenActiveCount} running={runningSessions.length} queued={queuedSessions.length} /> : null}
           </>
         ) : pending ? (
@@ -198,8 +232,10 @@ export function LiveScrapeScreens({ propertyId, pending = false, className }: Li
         ) : (
           <NoActiveScreens />
         )}
-      </div>
-    </section>
+        </div>
+      </section>
+      {diagnosticSession ? <DiagnosticModal session={diagnosticSession} onClose={() => setDiagnosticSession(null)} /> : null}
+    </>
   );
 }
 
@@ -252,7 +288,7 @@ function QueuedSummary({ count, running, queued }: { count: number; running: num
   );
 }
 
-function BrowserMiniScreen({ session }: { session: ScrapeSession }) {
+function BrowserMiniScreen({ session, onOpenDiagnostic }: { session: ScrapeSession; onOpenDiagnostic?: () => void }) {
   const latestEvent = session.events[0];
   const timeline = useMemo(() => session.events.slice(0, 4), [session.events]);
   const source = sourceLabels[session.source] ?? session.source;
@@ -304,6 +340,16 @@ function BrowserMiniScreen({ session }: { session: ScrapeSession }) {
             />
           </div>
         </div>
+        {isDiagnosticSession(session) && onOpenDiagnostic ? (
+          <button
+            type="button"
+            onClick={onOpenDiagnostic}
+            className="mb-3 inline-flex items-center gap-2 rounded-full border border-rose-300/25 bg-rose-400/10 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-400/20"
+          >
+            <AlertTriangle className="size-3.5" />
+            Open diagnostic
+          </button>
+        ) : null}
         <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
           <Terminal className="size-3.5" />
           Scrape Log
@@ -323,6 +369,117 @@ function BrowserMiniScreen({ session }: { session: ScrapeSession }) {
       </div>
     </div>
   );
+}
+
+function DiagnosticModal({ session, onClose }: { session: ScrapeSession; onClose: () => void }) {
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const bundle = useMemo(() => diagnosticBundle(session), [session]);
+  const reportText = useMemo(() => JSON.stringify(bundle, null, 2), [bundle]);
+
+  async function copyReport() {
+    try {
+      await navigator.clipboard.writeText(reportText);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("error");
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/72 p-4 backdrop-blur-sm">
+      <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-[24px] border border-rose-200/20 bg-slate-950 shadow-[0_30px_120px_rgba(0,0,0,0.45)]">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 p-5">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-rose-200">Temporary diagnostic report</p>
+            <h3 className="mt-2 text-2xl font-semibold text-white">{sourceLabels[session.source] ?? session.source} scan failed</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+              {session.error_message || session.progress_label || "Share this report so the scraper can be adjusted against the exact failure."}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-full border border-white/10 text-slate-300 hover:bg-white/10">
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="grid max-h-[calc(92vh-108px)] gap-4 overflow-y-auto p-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+          <div className="space-y-4">
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900">
+              <BrowserChrome source={sourceLabels[session.source] ?? session.source} status={session.status} url={session.current_url ?? session.target_url} />
+              <div className="grid aspect-video place-items-center bg-slate-950">
+                {session.latest_screenshot_data_url ? (
+                  <img src={session.latest_screenshot_data_url} alt="Chrome diagnostic screenshot" className="size-full object-contain" />
+                ) : (
+                  <div className="p-8 text-center">
+                    <AlertTriangle className="mx-auto size-10 text-rose-200" />
+                    <p className="mt-3 font-semibold text-white">No Chrome screenshot was captured</p>
+                    <p className="mt-1 text-sm text-slate-400">The report still includes job state and backend events.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+              <p className="font-semibold text-white">Recent event trail</p>
+              <div className="mt-3 space-y-2">
+                {session.events.slice(0, 8).map((event) => (
+                  <div key={`${event.at}-${event.event}`} className="rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className={cn("font-semibold", event.level === "error" ? "text-rose-200" : "text-cyan-200")}>{event.event}</span>
+                      <span className="text-xs text-slate-500">{new Date(event.at).toLocaleString()}</span>
+                    </div>
+                    <p className="mt-1 text-slate-300">{event.message || "No message"}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-slate-900 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-semibold text-white">Copy for Codex</p>
+              <button
+                type="button"
+                onClick={copyReport}
+                className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 hover:bg-cyan-300/15"
+              >
+                <Clipboard className="size-3.5" />
+                {copyStatus === "copied" ? "Copied" : copyStatus === "error" ? "Copy failed" : "Copy report"}
+              </button>
+            </div>
+            <textarea
+              readOnly
+              value={reportText}
+              className="mt-3 h-[520px] w-full resize-none rounded-2xl border border-white/10 bg-slate-950 p-3 font-mono text-xs leading-5 text-slate-300 outline-none"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function diagnosticBundle(session: ScrapeSession) {
+  return {
+    report_type: "rentalradar_chrome_scrape_failure",
+    generated_at: new Date().toISOString(),
+    session: {
+      id: session.id,
+      source: session.source,
+      status: session.status,
+      target_url: session.target_url,
+      current_url: session.current_url,
+      started_at: session.started_at,
+      completed_at: session.completed_at,
+      progress_percent: session.progress_percent,
+      progress_label: session.progress_label,
+      error_code: session.error_code,
+      error_message: session.error_message,
+      has_screenshot: Boolean(session.latest_screenshot_data_url),
+    },
+    diagnostics: session.diagnostics,
+    events: session.events.slice(0, 12),
+  };
+}
+
+function isDiagnosticSession(session: ScrapeSession) {
+  return ["failed", "needs_review"].includes(session.status) || Boolean(session.error_code || session.error_message);
 }
 
 function BrowserChrome({ source, status, url }: { source: string; status: string; url: string }) {

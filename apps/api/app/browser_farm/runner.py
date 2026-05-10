@@ -28,20 +28,32 @@ async def run_trained_scraping_script(
     """
 
     async with launch_headed_browser(job_id=job_id, proxy=proxy) as session:
-        generated_code = strategy.strategy_json.get("generated_python")
-        if generated_code:
-            payload = await execute_generated_scraper_code(
-                generated_code,
-                page=session.page,
-                context=session.context,
-                target=target,
-                strategy=strategy,
+        try:
+            generated_code = strategy.strategy_json.get("generated_python")
+            if generated_code:
+                payload = await execute_generated_scraper_code(
+                    generated_code,
+                    page=session.page,
+                    context=session.context,
+                    target=target,
+                    strategy=strategy,
+                )
+            else:
+                payload = await _execute_strategy_steps(session.page, target, strategy)
+            await session.action_logger.screenshot(session.page, "scrape.screenshot")
+            session.action_logger.write("scrape.completed", {"payload_keys": sorted(payload.keys())})
+            return _to_execution_result(payload, target, strategy)
+        except Exception as exc:
+            await session.action_logger.screenshot(session.page, "scrape.exception")
+            session.action_logger.write(
+                "scrape.exception",
+                {
+                    "message": str(exc) or type(exc).__name__,
+                    "url": session.page.url,
+                    "exception_type": type(exc).__name__,
+                },
             )
-        else:
-            payload = await _execute_strategy_steps(session.page, target, strategy)
-        await session.action_logger.screenshot(session.page, "scrape.screenshot")
-        session.action_logger.write("scrape.completed", {"payload_keys": sorted(payload.keys())})
-        return _to_execution_result(payload, target, strategy)
+            raise
 
 
 async def execute_generated_scraper_code(
@@ -87,6 +99,22 @@ async def _execute_strategy_steps(page: Any, target: ScrapeTarget, strategy: Scr
     diagnostics["title"] = await page.title()
     html = await page.content()
     diagnostics["html_sha256"] = hashlib.sha256(html.encode()).hexdigest()
+    diagnostics["current_url"] = page.url
+
+    blocker = await _detect_browser_blocker(page, html)
+    if blocker:
+        diagnostics["blocker"] = blocker
+        if action_logger:
+            await action_logger.screenshot(page, "scrape.blocker_detected")
+            action_logger.write("scrape.blocker_detected", blocker)
+        return {
+            "rates": [],
+            "confidence": 0,
+            "diagnostics": diagnostics,
+            "dom_fingerprint": diagnostics["html_sha256"][:16],
+            "raw_html_url": f"memory://{diagnostics['html_sha256']}",
+            "error_message": blocker["message"],
+        }
 
     selectors = []
     for step in strategy.strategy_json.get("steps", []):
@@ -100,6 +128,18 @@ async def _execute_strategy_steps(page: Any, target: ScrapeTarget, strategy: Scr
             break
         except Exception:
             continue
+    if not diagnostics.get("matched_selector") and action_logger:
+        action_logger.write(
+            "scrape.selector_missing",
+            {
+                "message": "Could not find an expected calendar, price, or availability selector.",
+                "url": page.url,
+                "selectors_checked": selectors[:12],
+                "selectors_checked_count": len(selectors),
+                "title": diagnostics.get("title"),
+            },
+        )
+        await action_logger.screenshot(page, "scrape.selector_missing")
 
     # The trained extractor is expected to replace this generic rate parser.
     return {
@@ -108,7 +148,40 @@ async def _execute_strategy_steps(page: Any, target: ScrapeTarget, strategy: Scr
         "diagnostics": diagnostics,
         "dom_fingerprint": diagnostics["html_sha256"][:16],
         "raw_html_url": f"memory://{diagnostics['html_sha256']}",
-    }
+}
+
+
+async def _detect_browser_blocker(page: Any, html: str) -> dict[str, Any] | None:
+    title = ""
+    body_text = ""
+    try:
+        title = await page.title()
+    except Exception:
+        pass
+    try:
+        body_text = await page.locator("body").inner_text(timeout=2_500)
+    except Exception:
+        body_text = ""
+
+    haystack = f"{title}\n{body_text[:5000]}\n{html[:5000]}".lower()
+    checks = [
+        ("captcha", ["captcha", "recaptcha", "hcaptcha", "verify you are human", "human verification"]),
+        ("bot_challenge", ["unusual traffic", "automated access", "are you a robot", "robot check", "security check"]),
+        ("access_denied", ["access denied", "forbidden", "request blocked", "temporarily blocked"]),
+        ("login_wall", ["sign in to continue", "log in to continue", "create an account to continue"]),
+        ("rate_limited", ["too many requests", "rate limit", "try again later"]),
+    ]
+    for kind, needles in checks:
+        matched = next((needle for needle in needles if needle in haystack), None)
+        if matched:
+            return {
+                "kind": kind,
+                "message": f"Chrome hit a {kind.replace('_', ' ')} while loading the OTA page.",
+                "matched_text": matched,
+                "url": page.url,
+                "title": title,
+            }
+    return None
 
 
 def _to_execution_result(

@@ -142,6 +142,7 @@ class ScrapeSessionEventResponse(BaseModel):
     message: str | None = None
     url: str | None = None
     status: int | None = None
+    payload: dict[str, Any] | None = None
 
 
 class ScrapeSessionResponse(BaseModel):
@@ -155,6 +156,9 @@ class ScrapeSessionResponse(BaseModel):
     completed_at: datetime | None = None
     current_url: str | None = None
     latest_screenshot_data_url: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
     progress_percent: int
     progress_label: str
     queue_position: int | None = None
