@@ -6,7 +6,7 @@ from uuid import UUID
 
 from celery.signals import worker_ready
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 from playwright.async_api import Page
 
@@ -263,48 +263,42 @@ def _get_or_create_scraper_strategy(
     success: bool,
 ) -> ScraperStrategy:
     version = int(plan.strategy_json.get("version", 1))
-    existing = db.scalar(
-        select(ScraperStrategy)
-        .where(ScraperStrategy.source == plan.source)
-        .where(ScraperStrategy.domain == plan.domain)
-        .where(ScraperStrategy.layout_fingerprint == plan.layout_fingerprint)
-        .where(ScraperStrategy.version == version)
-    )
-    if existing:
-        existing.strategy_json = plan.strategy_json
-        existing.success_rate = 1 if success else 0
-        existing.active = True
-        return existing
-
-    strategy = ScraperStrategy(
-        source=plan.source,
-        domain=plan.domain,
-        layout_fingerprint=plan.layout_fingerprint,
-        strategy_json=plan.strategy_json,
-        version=version,
-        success_rate=1 if success else 0,
-        active=True,
-        created_by_agent="playwright_trainer",
-    )
-    try:
-        with db.begin_nested():
-            db.add(strategy)
-            db.flush()
-        return strategy
-    except IntegrityError:
-        existing = db.scalar(
-            select(ScraperStrategy)
-            .where(ScraperStrategy.source == plan.source)
-            .where(ScraperStrategy.domain == plan.domain)
-            .where(ScraperStrategy.layout_fingerprint == plan.layout_fingerprint)
-            .where(ScraperStrategy.version == version)
+    success_rate = 1 if success else 0
+    statement = (
+        pg_insert(ScraperStrategy)
+        .values(
+            source=plan.source,
+            domain=plan.domain,
+            layout_fingerprint=plan.layout_fingerprint,
+            strategy_json=plan.strategy_json,
+            version=version,
+            success_rate=success_rate,
+            active=True,
+            created_by_agent="playwright_trainer",
         )
-        if existing:
-            existing.strategy_json = plan.strategy_json
-            existing.success_rate = 1 if success else 0
-            existing.active = True
-            return existing
-        raise
+        .on_conflict_do_update(
+            index_elements=[
+                ScraperStrategy.source,
+                ScraperStrategy.domain,
+                ScraperStrategy.layout_fingerprint,
+                ScraperStrategy.version,
+            ],
+            set_={
+                "strategy_json": plan.strategy_json,
+                "success_rate": success_rate,
+                "active": True,
+                "created_by_agent": "playwright_trainer",
+            },
+        )
+        .returning(ScraperStrategy.id)
+    )
+    strategy_id = db.scalar(statement)
+    if strategy_id is None:
+        raise RuntimeError("Failed to save scraper strategy")
+    strategy = db.get(ScraperStrategy, strategy_id)
+    if strategy is None:
+        raise RuntimeError("Saved scraper strategy could not be loaded")
+    return strategy
 
 
 @celery_app.task(name="app.workers.tasks.run_trained_scraping_script", bind=True, max_retries=2)
