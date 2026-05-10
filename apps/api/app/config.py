@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     scraper_proxy_redis_key: str = "rentalradar:proxy_pool"
     scraper_proxy_cooldown_seconds: int = 120
     scraper_require_residential_proxy: bool = False
+    scraper_allow_direct_fallback_on_proxy_failure: bool = True
     brightdata_proxy_server: str | None = None
     brightdata_proxy_scheme: str = "http"
     brightdata_proxy_host: str | None = None

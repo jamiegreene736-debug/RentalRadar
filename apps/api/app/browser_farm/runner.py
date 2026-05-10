@@ -290,6 +290,7 @@ def _blocker_from_text(
 ) -> dict[str, Any] | None:
     haystack = f"{status or ''}\n{title}\n{body_text[:5000]}\n{html[:5000]}".lower()
     checks = [
+        ("proxy_account_suspended", ["account is suspended"]),
         ("proxy_auth_required", ["proxy authentication required", "http error 407", "\n407\n"]),
         ("captcha", ["captcha", "recaptcha", "hcaptcha", "verify you are human", "human verification"]),
         (
@@ -312,11 +313,12 @@ def _blocker_from_text(
     for kind, needles in checks:
         matched = next((needle for needle in needles if needle in haystack), None)
         if matched:
-            message = (
-                "Chrome could not authenticate with the residential proxy. Check the proxy server, username, and password."
-                if kind == "proxy_auth_required"
-                else f"Chrome hit a {kind.replace('_', ' ')} while loading the OTA page."
-            )
+            if kind == "proxy_account_suspended":
+                message = "The residential proxy account is suspended. Update the proxy account or credentials, then retry the scan."
+            elif kind == "proxy_auth_required":
+                message = "Chrome could not authenticate with the residential proxy. Check the proxy server, username, and password."
+            else:
+                message = f"Chrome hit a {kind.replace('_', ' ')} while loading the OTA page."
             return {
                 "kind": kind,
                 "message": message,

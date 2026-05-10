@@ -288,6 +288,7 @@ def _is_non_retryable_browser_blocker(blocker: object) -> bool:
         return False
     return blocker.get("kind") in {
         "proxy_auth_required",
+        "proxy_account_suspended",
         "bot_challenge",
         "captcha",
         "access_denied",

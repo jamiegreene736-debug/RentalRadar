@@ -62,6 +62,35 @@ class ScraperExecutorAgent:
                 strategy=strategy,
                 proxy=proxy_lease,
             )
+            if (
+                _is_proxy_auth_failure(result)
+                and proxy_lease
+                and self.settings.scraper_allow_direct_fallback_on_proxy_failure
+            ):
+                proxy_rotator.mark_failure(proxy_lease, result.error_message or "proxy_auth_failure")
+                direct_result = await run_trained_scraping_script(
+                    job_id=job_id,
+                    target=ScrapeTarget(
+                        source=target.source,
+                        url=target.url,
+                        stay_date_start=target.stay_date_start,
+                        stay_date_end=target.stay_date_end,
+                        proxy_url=None,
+                        browser_session_id=job_id,
+                    ),
+                    strategy=strategy,
+                    proxy=None,
+                )
+                direct_result.diagnostics = {
+                    **(direct_result.diagnostics or {}),
+                    "proxy_fallback": {
+                        "mode": "direct_after_proxy_auth_failure",
+                        "failed_proxy_provider": proxy_lease.provider,
+                        "failed_proxy_server": proxy_lease.server,
+                        "failed_proxy_error": result.error_message,
+                    },
+                }
+                return direct_result
             if result.success:
                 proxy_rotator.mark_success(proxy_lease)
             else:
@@ -104,3 +133,11 @@ class ScraperExecutorAgent:
             extraction_confidence=0.78,
             diagnostics={"mode": mode, "proxy_url": target.proxy_url},
         )
+
+
+def _is_proxy_auth_failure(result: ScrapeExecutionResult) -> bool:
+    blocker = result.diagnostics.get("blocker") if isinstance(result.diagnostics, dict) else None
+    if isinstance(blocker, dict) and blocker.get("kind") in {"proxy_auth_required", "proxy_account_suspended"}:
+        return True
+    message = (result.error_message or "").lower()
+    return "proxy" in message and ("407" in message or "auth" in message or "suspended" in message)
