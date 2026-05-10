@@ -1,7 +1,8 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Chrome, Clock3, LoaderCircle, RefreshCw, TimerReset } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Chrome, Clock3, LoaderCircle, RefreshCw, RotateCcw, TimerReset } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import type { PropertyResponse, ScrapeSession, ScrapeSessionsResponse } from "@/lib/types";
@@ -19,20 +20,34 @@ const sourceLabels: Record<string, string> = {
   other: "Web",
 };
 
-export function QueuedScansWorkspace({ properties }: { properties: PropertyResponse[] }) {
-  const [selectedPropertyId, setSelectedPropertyId] = useState(properties[0]?.id ?? "");
-  const [sessions, setSessions] = useState<ScrapeSession[]>([]);
-  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+type ScanWithProperty = ScrapeSession & {
+  property: PropertyResponse;
+};
 
-  const selectedProperty = useMemo(
-    () => properties.find((property) => property.id === selectedPropertyId) ?? properties[0],
+export function QueuedScansWorkspace({ properties }: { properties: PropertyResponse[] }) {
+  const searchParams = useSearchParams();
+  const requestedPropertyId = searchParams?.get("property");
+  const initialPropertyId = requestedPropertyId && properties.some((property) => property.id === requestedPropertyId)
+    ? requestedPropertyId
+    : properties.length > 1 ? "all" : properties[0]?.id ?? "";
+  const [selectedPropertyId, setSelectedPropertyId] = useState(initialPropertyId);
+  const [sessions, setSessions] = useState<ScanWithProperty[]>([]);
+  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+
+  const targetProperties = useMemo(
+    () =>
+      selectedPropertyId === "all"
+        ? properties
+        : properties.filter((property) => property.id === selectedPropertyId),
     [properties, selectedPropertyId],
   );
   const activeSessions = useMemo(
     () => sessions.filter((session) => ["queued", "running"].includes(session.status)),
     [sessions],
   );
-  const visibleSessions = activeSessions.length ? activeSessions : sessions.slice(0, 6);
+  const visibleSessions = activeSessions.length ? activeSessions : sessions.slice(0, 8);
   const counts = useMemo(
     () => ({
       queued: sessions.filter((session) => session.status === "queued").length,
@@ -44,7 +59,7 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
   );
 
   useEffect(() => {
-    if (!selectedPropertyId) {
+    if (!targetProperties.length) {
       setSessions([]);
       setStatus("idle");
       return;
@@ -54,14 +69,23 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
     async function loadSessions() {
       try {
         setStatus((current) => (current === "ready" ? "ready" : "loading"));
-        const response = await fetch(`/api/backend/properties/${selectedPropertyId}/scrape-sessions?limit=60`, {
-          headers: { Accept: "application/json" },
-          cache: "no-store",
-        });
-        if (!response.ok) throw new Error(`Queued scans failed: ${response.status}`);
-        const payload = (await response.json()) as ScrapeSessionsResponse;
+        const payloads = await Promise.all(
+          targetProperties.map(async (property) => {
+            const response = await fetch(`/api/backend/properties/${property.id}/scrape-sessions?limit=60`, {
+              headers: { Accept: "application/json" },
+              cache: "no-store",
+            });
+            if (!response.ok) throw new Error(`Queued scans failed: ${response.status}`);
+            const payload = (await response.json()) as ScrapeSessionsResponse;
+            return payload.sessions.map((session) => ({ ...session, property }));
+          }),
+        );
         if (!cancelled) {
-          setSessions(payload.sessions);
+          setSessions(
+            payloads
+              .flat()
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+          );
           setStatus("ready");
         }
       } catch {
@@ -75,7 +99,35 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [selectedPropertyId]);
+  }, [targetProperties]);
+
+  async function retryScan(session: ScanWithProperty) {
+    if (!canRetry(session.status) || retryingIds.has(session.id)) return;
+    setRetryingIds((current) => new Set(current).add(session.id));
+    setActionMessage(null);
+    try {
+      const response = await fetch(`/api/backend/properties/${session.property.id}/scrape-sessions/${session.id}/retry`, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(`Retry failed: ${response.status}`);
+      const retrySession = (await response.json()) as ScrapeSession;
+      setSessions((current) => [
+        { ...retrySession, property: session.property },
+        ...current,
+      ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+      setActionMessage(`${sourceLabels[session.source] ?? session.source} scan retry queued for ${propertyLabel(session.property)}.`);
+    } catch {
+      setActionMessage("That scan could not be retried right now. Please try again in a moment.");
+    } finally {
+      setRetryingIds((current) => {
+        const next = new Set(current);
+        next.delete(session.id);
+        return next;
+      });
+    }
+  }
 
   if (!properties.length) {
     return (
@@ -96,7 +148,7 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">Queued Scans</p>
           <h1 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">Chrome browser queue</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            Watch queued and running headed Chrome scans with readable titles, queue position, progress, and the latest screen capture.
+            See each property/source scan, what is waiting, what needs attention, and which scans can be retried.
           </p>
         </div>
         <select
@@ -104,9 +156,10 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
           onChange={(event) => setSelectedPropertyId(event.target.value)}
           className="h-11 min-w-72 rounded-lg border border-cyan-900/10 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm outline-none transition focus:border-cyan-500"
         >
+          {properties.length > 1 ? <option value="all">All properties</option> : null}
           {properties.map((property) => (
             <option key={property.id} value={property.id}>
-              {property.name || property.formatted_address || property.address_line1}
+              {propertyLabel(property)}
             </option>
           ))}
         </select>
@@ -122,7 +175,9 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
       <div className="rounded-lg border border-cyan-900/10 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-semibold text-slate-950">{selectedProperty?.formatted_address ?? selectedProperty?.address_line1}</p>
+            <p className="font-semibold text-slate-950">
+              {selectedPropertyId === "all" ? "All property scan jobs" : propertyLabel(targetProperties[0])}
+            </p>
             <p className="mt-1 text-sm text-slate-600">
               {activeSessions.length
                 ? `${activeSessions.length} active scan${activeSessions.length === 1 ? "" : "s"} in the browser queue`
@@ -134,6 +189,11 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
             Refreshes every 2.5s
           </span>
         </div>
+        {actionMessage ? (
+          <div className="mt-4 rounded-lg border border-cyan-900/10 bg-cyan-50 px-4 py-3 text-sm font-medium text-cyan-900">
+            {actionMessage}
+          </div>
+        ) : null}
 
         {status === "loading" && !sessions.length ? (
           <div className="mt-5 grid min-h-64 place-items-center rounded-lg border border-dashed border-cyan-900/20 bg-cyan-50/40 text-sm text-slate-600">
@@ -147,11 +207,36 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
             Queued scans are temporarily unreachable.
           </div>
         ) : visibleSessions.length ? (
-          <div className="mt-5 grid gap-4 xl:grid-cols-2">
-            {visibleSessions.map((session) => (
-              <QueuedScanCard key={session.id} session={session} />
-            ))}
-          </div>
+          <>
+            <div className="mt-5 overflow-hidden rounded-lg border border-slate-200">
+              <div className="grid grid-cols-[minmax(220px,1.1fr)_minmax(170px,0.8fr)_minmax(150px,0.7fr)_minmax(160px,0.8fr)] gap-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 max-lg:hidden">
+                <span>Property</span>
+                <span>Scan</span>
+                <span>Status</span>
+                <span>Action</span>
+              </div>
+              <div className="divide-y divide-slate-200 bg-white">
+                {visibleSessions.map((session) => (
+                  <QueueScanRow
+                    key={session.id}
+                    session={session}
+                    retrying={retryingIds.has(session.id)}
+                    onRetry={() => retryScan(session)}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="mt-5 grid gap-4 xl:grid-cols-2">
+              {visibleSessions.slice(0, 4).map((session) => (
+                <QueuedScanCard
+                  key={session.id}
+                  session={session}
+                  retrying={retryingIds.has(session.id)}
+                  onRetry={() => retryScan(session)}
+                />
+              ))}
+            </div>
+          </>
         ) : (
           <div className="mt-5 rounded-lg border border-dashed border-cyan-900/20 bg-cyan-50/40 p-6 text-sm leading-6 text-slate-600">
             No scan jobs have been created for this property yet. Use the saved property page to scan the property, then return here to watch Chrome.
@@ -162,7 +247,48 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
   );
 }
 
-function QueuedScanCard({ session }: { session: ScrapeSession }) {
+function QueueScanRow({ session, retrying, onRetry }: { session: ScanWithProperty; retrying: boolean; onRetry: () => void }) {
+  const source = sourceLabels[session.source] ?? session.source;
+  return (
+    <div className="grid gap-3 px-4 py-4 text-sm lg:grid-cols-[minmax(220px,1.1fr)_minmax(170px,0.8fr)_minmax(150px,0.7fr)_minmax(160px,0.8fr)] lg:items-center">
+      <div className="min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Property</p>
+        <p className="truncate font-semibold text-slate-950">Property: {propertyLabel(session.property)}</p>
+        <p className="mt-1 truncate text-xs text-slate-500">{session.property.formatted_address ?? session.property.address_line1}</p>
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Scan</p>
+        <p className="font-semibold text-slate-950">Scan: {source}</p>
+        <p className="mt-1 truncate text-xs text-slate-500">{scanWindow(session)}</p>
+      </div>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Status</p>
+        <StatusBadge status={session.status} variant="light" />
+        <p className="mt-1 text-xs text-slate-500">{session.queue_position ? `Queue position ${session.queue_position}` : formatDate(session.started_at ?? session.created_at)}</p>
+      </div>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Action</p>
+        {canRetry(session.status) ? (
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={retrying}
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {retrying ? <LoaderCircle className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+            Retry scan
+          </button>
+        ) : (
+          <span className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-600">
+            {activeCopy(session.status)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function QueuedScanCard({ session, retrying, onRetry }: { session: ScanWithProperty; retrying: boolean; onRetry: () => void }) {
   const source = sourceLabels[session.source] ?? session.source;
   const title = scanTitle(session, source);
   const displayUrl = session.current_url ?? session.target_url;
@@ -219,6 +345,10 @@ function QueuedScanCard({ session }: { session: ScrapeSession }) {
             {session.queue_position ? `Queue position ${session.queue_position}` : formatDate(session.started_at ?? session.created_at)}
           </span>
         </div>
+        <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2">
+          <p className="truncate text-xs font-semibold text-white">Property: {propertyLabel(session.property)}</p>
+          <p className="mt-1 truncate text-xs text-slate-400">Scan: {source} · {scanWindow(session)}</p>
+        </div>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
           <div className={cn("h-full rounded-full transition-all duration-700", progressBarClass(session.status))} style={{ width: `${clampedProgress(session.progress_percent)}%` }} />
         </div>
@@ -230,6 +360,17 @@ function QueuedScanCard({ session }: { session: ScrapeSession }) {
             </p>
           ))}
         </div>
+        {canRetry(session.status) ? (
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={retrying}
+            className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-white px-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {retrying ? <LoaderCircle className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+            Retry this scan
+          </button>
+        ) : null}
       </div>
     </article>
   );
@@ -245,9 +386,9 @@ function Metric({ icon: Icon, label, value, tone }: { icon: LucideIcon; label: s
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, variant = "dark" }: { status: string; variant?: "dark" | "light" }) {
   return (
-    <span className={cn("inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold", statusClass(status))}>
+    <span className={cn("inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold", statusClass(status, variant))}>
       {statusLabel(status)}
     </span>
   );
@@ -270,6 +411,30 @@ function queueCopy(session: ScrapeSession) {
   return session.error_message || session.progress_label;
 }
 
+function propertyLabel(property?: PropertyResponse) {
+  if (!property) return "Unknown property";
+  return property.name || property.formatted_address || property.address_line1;
+}
+
+function scanWindow(session: ScrapeSession) {
+  const diagnostics = session.diagnostics ?? {};
+  const stayStart = typeof diagnostics.stay_date_start === "string" ? diagnostics.stay_date_start : null;
+  const stayEnd = typeof diagnostics.stay_date_end === "string" ? diagnostics.stay_date_end : null;
+  if (stayStart && stayEnd) return `${shortDate(stayStart)} to ${shortDate(stayEnd)}`;
+  return scanTitle(session, sourceLabels[session.source] ?? session.source);
+}
+
+function canRetry(status: string) {
+  return ["failed", "needs_review", "canceled"].includes(status);
+}
+
+function activeCopy(status: string) {
+  if (status === "queued") return "Already queued";
+  if (status === "running") return "Running now";
+  if (status === "succeeded") return "Complete";
+  return "No action needed";
+}
+
 function statusLabel(status: string) {
   if (status === "queued") return "Queued";
   if (status === "running") return "Chrome running";
@@ -280,7 +445,14 @@ function statusLabel(status: string) {
   return status.replaceAll("_", " ");
 }
 
-function statusClass(status: string) {
+function statusClass(status: string, variant: "dark" | "light" = "dark") {
+  if (variant === "light") {
+    if (status === "queued") return "border-amber-200 bg-amber-50 text-amber-700";
+    if (status === "running") return "border-cyan-200 bg-cyan-50 text-cyan-700";
+    if (status === "succeeded") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    if (status === "failed" || status === "needs_review") return "border-rose-200 bg-rose-50 text-rose-700";
+    return "border-slate-200 bg-slate-50 text-slate-600";
+  }
   if (status === "queued") return "border-amber-300/30 bg-amber-300/10 text-amber-100";
   if (status === "running") return "border-cyan-300/30 bg-cyan-300/10 text-cyan-100";
   if (status === "succeeded") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-100";

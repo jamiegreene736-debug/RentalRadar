@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
@@ -178,7 +179,7 @@ export function RateForecastResults({ propertyId, view = "full" }: { propertyId?
           ) : null}
 
           {showSuggested ? (
-            <SourceCoveragePanel forecast={forecast} sourceCheck={sourceCheck} />
+            <SourceCoveragePanel propertyId={propertyId} forecast={forecast} sourceCheck={sourceCheck} />
           ) : null}
 
           {showMarket ? (
@@ -313,9 +314,11 @@ function forecastTitle(view: ForecastView) {
 }
 
 function SourceCoveragePanel({
+  propertyId,
   forecast,
   sourceCheck,
 }: {
+  propertyId: string;
   forecast: RateForecastResponse;
   sourceCheck: {
     status: "idle" | "checking" | "ready" | "error";
@@ -341,7 +344,15 @@ function SourceCoveragePanel({
       />
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-sm font-semibold text-slate-950">OTA browser scans</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-slate-950">OTA browser scans</p>
+            <Link
+              href={`/dashboard/queued-scans?property=${propertyId}`}
+              className="inline-flex h-8 items-center rounded-lg border border-cyan-900/10 bg-white px-3 text-xs font-semibold text-cyan-800 shadow-sm transition hover:bg-cyan-50"
+            >
+              Open queued scans
+            </Link>
+          </div>
           <div className="grid gap-2 sm:grid-cols-3">
             {forecast.market_sources.map((source) => (
               <SourceChip

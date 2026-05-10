@@ -689,6 +689,94 @@ def scrape_sessions(
     )
 
 
+@router.post("/properties/{property_id}/scrape-sessions/{scrape_job_id}/retry", response_model=ScrapeSessionResponse)
+def retry_scrape_session(
+    property_id: UUID,
+    scrape_job_id: UUID,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> ScrapeSessionResponse:
+    rental = db.scalar(
+        select(Property)
+        .where(Property.id == property_id)
+        .where(Property.organization_id == context.organization_id)
+        .where(Property.active.is_(True))
+    )
+    if rental is None:
+        raise HTTPException(status_code=404, detail="Property not found")
+
+    original = db.scalar(
+        select(ScrapeJob)
+        .where(ScrapeJob.id == scrape_job_id)
+        .where(ScrapeJob.property_id == property_id)
+        .where(ScrapeJob.organization_id == context.organization_id)
+    )
+    if original is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    if original.status in {ScrapeJobStatus.queued, ScrapeJobStatus.running}:
+        queue_positions = _queue_positions(db, context.organization_id)
+        return _scrape_session_response(db, original, queue_positions.get(original.id))
+
+    retry_job = ScrapeJob(
+        organization_id=context.organization_id,
+        property_id=rental.id,
+        competitor_id=original.competitor_id,
+        scraper_strategy_id=original.scraper_strategy_id,
+        source=original.source,
+        target_url=original.target_url,
+        stay_date_start=original.stay_date_start,
+        stay_date_end=original.stay_date_end,
+        status=ScrapeJobStatus.queued,
+        priority=min(original.priority, 15),
+        request_context={
+            **(original.request_context or {}),
+            "trigger": "manual_retry",
+            "retried_from_job_id": str(original.id),
+            "retried_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    db.add(retry_job)
+    db.flush()
+    try:
+        require_usage_allowance(
+            db,
+            context.organization_id,
+            "scrape_job",
+            property_id=rental.id,
+            source="manual_retry",
+            idempotency_key=f"scrape_retry:{retry_job.id}",
+        )
+    except BillingRequired as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
+    except UsageLimitExceeded as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+
+    db.add(
+        ScrapeJobLog(
+            scrape_job_id=original.id,
+            level="info",
+            event="scrape.retry_requested",
+            message=f"Manual retry queued as {retry_job.id}.",
+            payload={"retry_job_id": str(retry_job.id)},
+        )
+    )
+    db.add(
+        ScrapeJobLog(
+            scrape_job_id=retry_job.id,
+            level="info",
+            event="scrape.retry_queued",
+            message="Manual retry queued from the dashboard.",
+            payload={"original_job_id": str(original.id)},
+        )
+    )
+    db.commit()
+    db.refresh(retry_job)
+    run_scrape_job.delay(str(retry_job.id))
+    queue_positions = _queue_positions(db, context.organization_id)
+    return _scrape_session_response(db, retry_job, queue_positions.get(retry_job.id))
+
+
 def _queue_target_month_browser_scans(
     *,
     db: Session,
