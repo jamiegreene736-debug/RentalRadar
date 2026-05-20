@@ -102,7 +102,11 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
   }, [targetProperties]);
 
   async function retryScan(session: ScanWithProperty) {
-    if (!canRetry(session.status) || retryingIds.has(session.id)) return;
+    const retry = retryInfo(session);
+    if (!retry.eligible || retryingIds.has(session.id)) {
+      if (retry.reason) setActionMessage(retry.reason);
+      return;
+    }
     setRetryingIds((current) => new Set(current).add(session.id));
     setActionMessage(null);
     try {
@@ -111,15 +115,15 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
         headers: { Accept: "application/json" },
         cache: "no-store",
       });
-      if (!response.ok) throw new Error(`Retry failed: ${response.status}`);
+      if (!response.ok) throw new Error(await retryErrorMessage(response));
       const retrySession = (await response.json()) as ScrapeSession;
       setSessions((current) => [
         { ...retrySession, property: session.property },
         ...current,
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
       setActionMessage(`${sourceLabels[session.source] ?? session.source} scan retry queued for ${propertyLabel(session.property)}.`);
-    } catch {
-      setActionMessage("That scan could not be retried right now. Please try again in a moment.");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "That scan could not be retried right now. Please try again in a moment.");
     } finally {
       setRetryingIds((current) => {
         const next = new Set(current);
@@ -249,6 +253,7 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
 
 function QueueScanRow({ session, retrying, onRetry }: { session: ScanWithProperty; retrying: boolean; onRetry: () => void }) {
   const source = sourceLabels[session.source] ?? session.source;
+  const retry = retryInfo(session);
   return (
     <div className="grid gap-3 px-4 py-4 text-sm lg:grid-cols-[minmax(220px,1.1fr)_minmax(170px,0.8fr)_minmax(150px,0.7fr)_minmax(160px,0.8fr)] lg:items-center">
       <div className="min-w-0">
@@ -268,7 +273,7 @@ function QueueScanRow({ session, retrying, onRetry }: { session: ScanWithPropert
       </div>
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Action</p>
-        {canRetry(session.status) ? (
+        {retry.eligible ? (
           <button
             type="button"
             onClick={onRetry}
@@ -279,8 +284,11 @@ function QueueScanRow({ session, retrying, onRetry }: { session: ScanWithPropert
             Retry scan
           </button>
         ) : (
-          <span className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-600">
-            {activeCopy(session.status)}
+          <span
+            title={retry.reason ?? undefined}
+            className="inline-flex min-h-10 max-w-full items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600"
+          >
+            <span className="truncate">{retry.reason ?? activeCopy(session.status)}</span>
           </span>
         )}
       </div>
@@ -293,6 +301,7 @@ function QueuedScanCard({ session, retrying, onRetry }: { session: ScanWithPrope
   const title = scanTitle(session, source);
   const displayUrl = session.current_url ?? session.target_url;
   const latestEvent = session.events[0];
+  const retry = retryInfo(session);
 
   return (
     <article className="overflow-hidden rounded-lg border border-slate-200 bg-slate-950 shadow-sm">
@@ -360,7 +369,7 @@ function QueuedScanCard({ session, retrying, onRetry }: { session: ScanWithPrope
             </p>
           ))}
         </div>
-        {canRetry(session.status) ? (
+        {retry.eligible ? (
           <button
             type="button"
             onClick={onRetry}
@@ -370,6 +379,10 @@ function QueuedScanCard({ session, retrying, onRetry }: { session: ScanWithPrope
             {retrying ? <LoaderCircle className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
             Retry this scan
           </button>
+        ) : retry.reason && ["failed", "needs_review", "canceled"].includes(session.status) ? (
+          <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold leading-5 text-slate-300">
+            {retry.reason}
+          </div>
         ) : null}
       </div>
     </article>
@@ -424,8 +437,31 @@ function scanWindow(session: ScrapeSession) {
   return scanTitle(session, sourceLabels[session.source] ?? session.source);
 }
 
-function canRetry(status: string) {
-  return ["failed", "needs_review", "canceled"].includes(status);
+function retryInfo(session: ScrapeSession) {
+  const diagnostics = session.diagnostics ?? {};
+  const eligibleFromApi = typeof diagnostics.retry_eligible === "boolean" ? diagnostics.retry_eligible : null;
+  const reason = typeof diagnostics.retry_disabled_reason === "string" ? diagnostics.retry_disabled_reason : null;
+  const attemptsUsed = typeof diagnostics.manual_retry_attempts_used === "number" ? diagnostics.manual_retry_attempts_used : null;
+  const limit = typeof diagnostics.manual_retry_limit === "number" ? diagnostics.manual_retry_limit : null;
+  const eligibleStatus = ["failed", "needs_review", "canceled"].includes(session.status);
+  const eligible = eligibleFromApi ?? eligibleStatus;
+  const retryCountCopy = attemptsUsed !== null && limit !== null ? `Retry ${attemptsUsed}/${limit}` : null;
+  return {
+    eligible: eligible && eligibleStatus,
+    reason: reason ?? (!eligible && retryCountCopy ? retryCountCopy : null),
+    attemptsUsed,
+    limit,
+  };
+}
+
+async function retryErrorMessage(response: Response) {
+  try {
+    const payload = (await response.json()) as { detail?: unknown };
+    if (typeof payload.detail === "string") return payload.detail;
+  } catch {
+  }
+  if (response.status === 409) return "This scan cannot be retried again yet.";
+  return `Retry failed: ${response.status}`;
 }
 
 function activeCopy(status: string) {

@@ -122,6 +122,106 @@ def test_needs_review_with_browser_events_keeps_evidence_progress() -> None:
     assert properties._scrape_progress_percent(job, events, "data:image/jpeg;base64,abc", None) == 82
 
 
+def test_manual_retry_policy_allows_limited_retry_chain() -> None:
+    organization_id = uuid4()
+    property_id = uuid4()
+    root = _scrape_job(
+        organization_id=organization_id,
+        property_id=property_id,
+        status=ScrapeJobStatus.failed,
+        created_at=datetime(2026, 5, 20, 12, tzinfo=timezone.utc),
+    )
+    retry_one = _scrape_job(
+        organization_id=organization_id,
+        property_id=property_id,
+        status=ScrapeJobStatus.failed,
+        created_at=datetime(2026, 5, 20, 12, 5, tzinfo=timezone.utc),
+        request_context={"trigger": "manual_retry", "retried_from_job_id": str(root.id)},
+    )
+    retry_two = _scrape_job(
+        organization_id=organization_id,
+        property_id=property_id,
+        status=ScrapeJobStatus.failed,
+        created_at=datetime(2026, 5, 20, 12, 10, tzinfo=timezone.utc),
+        request_context={"trigger": "manual_retry", "retried_from_job_id": str(retry_one.id)},
+    )
+    db = Mock()
+    db.scalars.return_value = _ScalarResult([root, retry_one, retry_two])
+
+    policy = properties._manual_retry_policy(db, retry_two)
+
+    assert policy["retry_eligible"] is True
+    assert policy["manual_retry_attempts_used"] == 2
+    assert policy["manual_retry_limit"] == 3
+    assert policy["retry_root_job_id"] == str(root.id)
+
+
+def test_manual_retry_policy_stops_after_limit() -> None:
+    organization_id = uuid4()
+    property_id = uuid4()
+    root = _scrape_job(
+        organization_id=organization_id,
+        property_id=property_id,
+        status=ScrapeJobStatus.failed,
+        created_at=datetime(2026, 5, 20, 12, tzinfo=timezone.utc),
+    )
+    retry_one = _scrape_job(
+        organization_id=organization_id,
+        property_id=property_id,
+        status=ScrapeJobStatus.failed,
+        created_at=datetime(2026, 5, 20, 12, 5, tzinfo=timezone.utc),
+        request_context={"trigger": "manual_retry", "retried_from_job_id": str(root.id)},
+    )
+    retry_two = _scrape_job(
+        organization_id=organization_id,
+        property_id=property_id,
+        status=ScrapeJobStatus.failed,
+        created_at=datetime(2026, 5, 20, 12, 10, tzinfo=timezone.utc),
+        request_context={"trigger": "manual_retry", "retried_from_job_id": str(retry_one.id)},
+    )
+    retry_three = _scrape_job(
+        organization_id=organization_id,
+        property_id=property_id,
+        status=ScrapeJobStatus.failed,
+        created_at=datetime(2026, 5, 20, 12, 15, tzinfo=timezone.utc),
+        request_context={"trigger": "manual_retry", "retried_from_job_id": str(retry_two.id)},
+    )
+    db = Mock()
+    db.scalars.return_value = _ScalarResult([root, retry_one, retry_two, retry_three])
+
+    policy = properties._manual_retry_policy(db, retry_three)
+
+    assert policy["retry_eligible"] is False
+    assert policy["manual_retry_attempts_used"] == 3
+    assert "Retry limit reached" in policy["retry_disabled_reason"]
+
+
+def test_manual_retry_policy_blocks_old_scan_after_newer_success() -> None:
+    organization_id = uuid4()
+    property_id = uuid4()
+    root = _scrape_job(
+        organization_id=organization_id,
+        property_id=property_id,
+        status=ScrapeJobStatus.failed,
+        created_at=datetime(2026, 5, 20, 12, tzinfo=timezone.utc),
+    )
+    retry_success = _scrape_job(
+        organization_id=organization_id,
+        property_id=property_id,
+        status=ScrapeJobStatus.succeeded,
+        created_at=datetime(2026, 5, 20, 12, 5, tzinfo=timezone.utc),
+        request_context={"trigger": "manual_retry", "retried_from_job_id": str(root.id)},
+    )
+    db = Mock()
+    db.scalars.return_value = _ScalarResult([root, retry_success])
+
+    policy = properties._manual_retry_policy(db, root)
+
+    assert policy["retry_eligible"] is False
+    assert policy["superseded_by_job_id"] == str(retry_success.id)
+    assert policy["retry_disabled_reason"] == "This scan already completed in a newer retry."
+
+
 def test_current_page_url_ignores_telemetry_requests() -> None:
     now = datetime.now(timezone.utc)
     events = [
@@ -240,3 +340,26 @@ def test_brightdata_proxy_server_can_be_built_from_host_and_port(monkeypatch) ->
     assert lease.server == "http://brd.superproxy.io:33335"
     assert lease.username == "customer-rrabc123"
     assert lease.password == "secret"
+
+
+def _scrape_job(
+    *,
+    organization_id,
+    property_id,
+    status: ScrapeJobStatus,
+    created_at: datetime,
+    request_context: dict | None = None,
+) -> ScrapeJob:
+    job = ScrapeJob(
+        id=uuid4(),
+        organization_id=organization_id,
+        property_id=property_id,
+        source=ScrapeSource.airbnb,
+        target_url="https://www.airbnb.com/s/test/homes",
+        stay_date_start=datetime(2026, 7, 1, tzinfo=timezone.utc).date(),
+        stay_date_end=datetime(2026, 7, 7, tzinfo=timezone.utc).date(),
+        status=status,
+        request_context=request_context or {},
+    )
+    job.created_at = created_at
+    return job

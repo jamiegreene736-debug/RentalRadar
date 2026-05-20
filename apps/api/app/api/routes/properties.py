@@ -75,6 +75,7 @@ from app.workers.tasks import run_scrape_job
 router = APIRouter(tags=["properties"])
 
 STALE_RUNNING_SECONDS = 180
+MANUAL_RETRY_LIMIT = 3
 NOISY_BROWSER_HOSTS = {
     "browser-intake-datadoghq.com",
     "bat.bing.com",
@@ -718,6 +719,22 @@ def retry_scrape_session(
         queue_positions = _queue_positions(db, context.organization_id)
         return _scrape_session_response(db, original, queue_positions.get(original.id))
 
+    retry_policy = _manual_retry_policy(db, original)
+    if not retry_policy["retry_eligible"]:
+        reason = str(retry_policy["retry_disabled_reason"])
+        db.add(
+            ScrapeJobLog(
+                scrape_job_id=original.id,
+                level="warning",
+                event="scrape.retry_blocked",
+                message=reason,
+                payload=retry_policy,
+            )
+        )
+        db.commit()
+        raise HTTPException(status_code=409, detail=reason)
+
+    manual_retry_attempt = int(retry_policy["manual_retry_attempts_used"]) + 1
     retry_job = ScrapeJob(
         organization_id=context.organization_id,
         property_id=rental.id,
@@ -733,6 +750,9 @@ def retry_scrape_session(
             **(original.request_context or {}),
             "trigger": "manual_retry",
             "retried_from_job_id": str(original.id),
+            "retry_root_job_id": retry_policy["retry_root_job_id"],
+            "manual_retry_attempt": manual_retry_attempt,
+            "manual_retry_limit": MANUAL_RETRY_LIMIT,
             "retried_at": datetime.now(timezone.utc).isoformat(),
         },
     )
@@ -767,7 +787,12 @@ def retry_scrape_session(
             level="info",
             event="scrape.retry_queued",
             message="Manual retry queued from the dashboard.",
-            payload={"original_job_id": str(original.id)},
+            payload={
+                "original_job_id": str(original.id),
+                "retry_root_job_id": retry_policy["retry_root_job_id"],
+                "manual_retry_attempt": manual_retry_attempt,
+                "manual_retry_limit": MANUAL_RETRY_LIMIT,
+            },
         )
     )
     db.commit()
@@ -1035,7 +1060,7 @@ def _scrape_session_response(db: Session, job: ScrapeJob, queue_position: int | 
         latest_screenshot_data_url=latest_screenshot_data_url,
         error_code=job.error_code,
         error_message=job.error_message,
-        diagnostics=_scrape_diagnostics(job, merged_events),
+        diagnostics=_scrape_diagnostics(db, job, merged_events),
         progress_percent=_scrape_progress_percent(job, merged_events, latest_screenshot_data_url, queue_position),
         progress_label=_scrape_progress_label(job, merged_events, queue_position),
         queue_position=queue_position,
@@ -1309,8 +1334,128 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
-def _scrape_diagnostics(job: ScrapeJob, events: list[ScrapeSessionEventResponse]) -> dict[str, Any]:
+def _manual_retry_policy(db: Session, job: ScrapeJob) -> dict[str, Any]:
+    cohort = _same_scan_jobs(db, job)
+    by_id = {item.id: item for item in cohort}
+    root_job_id = _retry_root_job_id(job, by_id)
+    family = [item for item in cohort if _retry_root_job_id(item, by_id) == root_job_id]
+    manual_retry_jobs = [
+        item
+        for item in family
+        if _retry_context(item).get("trigger") == "manual_retry" or _retry_context(item).get("retried_from_job_id")
+    ]
+    newer_success = _newer_job_with_status(family, job, ScrapeJobStatus.succeeded)
+    newer_active = _newer_job_with_status(family, job, ScrapeJobStatus.queued, ScrapeJobStatus.running)
+    attempts_used = len(manual_retry_jobs)
+    retry_eligible = job.status in {ScrapeJobStatus.failed, ScrapeJobStatus.needs_review, ScrapeJobStatus.canceled}
+    disabled_reason: str | None = None
+    superseded_by_job_id: str | None = None
+
+    if newer_success is not None:
+        retry_eligible = False
+        superseded_by_job_id = str(newer_success.id)
+        disabled_reason = "This scan already completed in a newer retry."
+    elif newer_active is not None:
+        retry_eligible = False
+        superseded_by_job_id = str(newer_active.id)
+        disabled_reason = "A newer retry is already waiting or running."
+    elif attempts_used >= MANUAL_RETRY_LIMIT:
+        retry_eligible = False
+        disabled_reason = f"Retry limit reached. We stopped after {MANUAL_RETRY_LIMIT} retries so this scan does not loop."
+    elif job.status in {ScrapeJobStatus.queued, ScrapeJobStatus.running}:
+        retry_eligible = False
+        disabled_reason = "This scan is already waiting or running."
+    elif job.status == ScrapeJobStatus.succeeded:
+        retry_eligible = False
+        disabled_reason = "This scan already completed."
+    elif not retry_eligible:
+        disabled_reason = "This scan does not need a retry."
+
+    return {
+        "retry_eligible": retry_eligible,
+        "retry_disabled_reason": disabled_reason,
+        "retry_root_job_id": str(root_job_id),
+        "manual_retry_attempts_used": attempts_used,
+        "manual_retry_limit": MANUAL_RETRY_LIMIT,
+        "superseded_by_job_id": superseded_by_job_id,
+    }
+
+
+def _same_scan_jobs(db: Session, job: ScrapeJob) -> list[ScrapeJob]:
+    return list(
+        db.scalars(
+            select(ScrapeJob)
+            .where(*_same_scan_filters(job))
+            .order_by(ScrapeJob.created_at.asc())
+            .limit(200)
+        ).all()
+    )
+
+
+def _same_scan_filters(job: ScrapeJob) -> list[Any]:
+    return [
+        ScrapeJob.organization_id == job.organization_id,
+        ScrapeJob.property_id == job.property_id,
+        ScrapeJob.source == job.source,
+        ScrapeJob.target_url == job.target_url,
+        ScrapeJob.stay_date_start == job.stay_date_start,
+        ScrapeJob.stay_date_end == job.stay_date_end,
+    ]
+
+
+def _retry_root_job_id(job: ScrapeJob, jobs_by_id: dict[UUID, ScrapeJob]) -> UUID:
+    current = job
+    seen: set[UUID] = set()
+    while current.id not in seen:
+        seen.add(current.id)
+        parent_id = _retry_parent_id(current)
+        if parent_id is None:
+            break
+        parent = jobs_by_id.get(parent_id)
+        if parent is None:
+            return parent_id
+        current = parent
+    return current.id
+
+
+def _retry_parent_id(job: ScrapeJob) -> UUID | None:
+    raw_parent_id = _retry_context(job).get("retried_from_job_id")
+    if not isinstance(raw_parent_id, str):
+        return None
+    try:
+        return UUID(raw_parent_id)
+    except ValueError:
+        return None
+
+
+def _retry_context(job: ScrapeJob) -> dict[str, Any]:
+    return job.request_context if isinstance(job.request_context, dict) else {}
+
+
+def _newer_job_with_status(family: list[ScrapeJob], job: ScrapeJob, *statuses: ScrapeJobStatus) -> ScrapeJob | None:
+    job_created_at = _job_created_at(job)
+    later_jobs = [
+        item
+        for item in family
+        if item.id != job.id and _job_created_at(item) > job_created_at and item.status in statuses
+    ]
+    if not later_jobs:
+        return None
+    return max(later_jobs, key=_job_created_at)
+
+
+def _job_created_at(job: ScrapeJob) -> datetime:
+    value = job.created_at
+    if value is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _scrape_diagnostics(db: Session, job: ScrapeJob, events: list[ScrapeSessionEventResponse]) -> dict[str, Any]:
     result_summary = job.result_summary if isinstance(job.result_summary, dict) else {}
+    retry_policy = _manual_retry_policy(db, job)
     return {
         "job_id": str(job.id),
         "source": job.source.value if hasattr(job.source, "value") else str(job.source),
@@ -1324,6 +1469,12 @@ def _scrape_diagnostics(job: ScrapeJob, events: list[ScrapeSessionEventResponse]
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "completed_at": job.completed_at.isoformat() if job.completed_at else None,
         "request_context": job.request_context if isinstance(job.request_context, dict) else {},
+        "retry_eligible": retry_policy["retry_eligible"],
+        "retry_disabled_reason": retry_policy["retry_disabled_reason"],
+        "retry_root_job_id": retry_policy["retry_root_job_id"],
+        "manual_retry_attempts_used": retry_policy["manual_retry_attempts_used"],
+        "manual_retry_limit": retry_policy["manual_retry_limit"],
+        "superseded_by_job_id": retry_policy["superseded_by_job_id"],
         "result_summary": {
             key: value
             for key, value in result_summary.items()
