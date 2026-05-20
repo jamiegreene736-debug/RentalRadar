@@ -1,35 +1,35 @@
-RentalRadar.ai 47-second explainer
+RentalRadar.ai 54-second explainer
 
 Voiceover voice:
-Warm, friendly, confident American male, age 35-42. Conversational, trustworthy, clear, positive, and helpful.
+ElevenLabs text-to-speech. Warm, friendly, confident American narrator. Conversational, trustworthy, clear, positive, and helpful.
 
 Full voiceover script:
-Most pricing tools are guessing with old data. Here's why RentalRadar gets it right every single time. Other tools rely on stale APIs and limited information. They don't see what guests are actually seeing today. RentalRadar uses an army of AI agents that do the manual research for you. They check every listing live, exactly the way a guest sees it right now, and combine it with your real bookings and revenue data. So you get clear, trustworthy pricing recommendations that actually make you more money with way less guesswork. Smarter pricing. Higher revenue. Zero guesswork. That's RentalRadar.
+The next generation of vacation rental pricing is here. RentalRadar does not stop at stale feeds or generic market averages. Our AI agents run live Playwright workflows in headed Chrome, checking the same guest-visible pages travelers use. They watch comp prices, calendars, fees, availability, and booking signals as the market moves. Then RentalRadar combines that live market evidence with your real booking data, occupancy, pace, lead time, and revenue. The result is not a black box. Every recommendation explains what changed, why it matters, and what rate gives you the best chance to win the booking. Live browser intelligence plus real performance data. That is the ultimate combination. That is RentalRadar.
 
 Storyboard:
-0-8 sec - Hook
-Visual: Old pricing dashboard, stale-data cards, and a guess meter moving from old data to RentalRadar live checks.
-On-screen text: Most pricing tools are guessing with old data. / Old data in. Stale guess out.
+0-7 sec - Next-generation pricing
+Visual: RentalRadar AI pricing agent panel beside an animated live-market eye and radar rings.
+On-screen text: The next generation of pricing is here. / AI agents + real data.
 
-8-22 sec - Problem with other tools
-Visual: Cards for yesterday's rates, missing open nights, and no guest view beside a dark panel asking what guests see today.
-On-screen text: Other tools miss what guests are actually seeing today. / Stale feeds miss today's market.
+7-17 sec - Problem with stale tools
+Visual: Stale-feed cards for yesterday's rates, missing open nights, and no guest view beside a dark guest-visible reality panel.
+On-screen text: Stale feeds miss what guests see today. / Old averages are not enough.
 
-22-35 sec - RentalRadar difference
-Visual: Four live check cards for VRBO, Airbnb, Booking.com, and Your PM Website with a cursor clicking through live prices.
-On-screen text: An army of AI agents does the manual research for you. / Live guest prices + your real bookings.
+17-32 sec - RentalRadar difference
+Visual: Playwright headed Chrome and AI agent badges above four live check cards for Airbnb, VRBO, Booking.com, and a direct booking site.
+On-screen text: AI agents browse live with headed Chrome. / See exactly what travelers see.
 
-29-35 sec - Booking data blend
-Visual: Your booking bars combine with live guest prices to create a smarter price.
-On-screen text: Live guest prices + your booking numbers = smarter price.
+32-43 sec - Ultimate combination
+Visual: Your real bookings and revenue bars combine with live guest-market evidence into a better rate decision.
+On-screen text: Live market evidence plus your real booking data. / Browser intelligence + performance data.
 
-35-43 sec - Benefit
-Visual: Daily recommendation rows show raise, hold, and fill-gap moves with a friendly explanation card.
-On-screen text: Clear pricing recommendations you can actually trust. / Know why every price changed.
+43-50 sec - LLM decision layer
+Visual: Daily recommendation rows show raise, hold, and fill-gap moves with an LLM explanation card.
+On-screen text: Every price comes with a clear AI explanation. / No black box decisions.
 
-43-47 sec - Close
+50-54 sec - Close
 Visual: RentalRadar.ai end card with radar rings and a Start free call to action.
-On-screen text: Smarter pricing. Higher revenue. Zero guesswork. / Start free - no credit card.
+On-screen text: Live browser intelligence. Real data. Better rates. / That is RentalRadar.
 
 Background music:
 Upbeat, modern, clean, light electronic pulse under the voice. Friendly momentum, not corporate, and quiet enough that the voice stays primary.

@@ -34,15 +34,16 @@ export function PricingSuperiorityVideo() {
           <div>
             <p className="flex items-center justify-center gap-2 text-sm font-semibold uppercase tracking-[0.22em] text-cyan-700">
               <BrainCircuit className="size-4" />
-              47-second overview
+              54-second overview
             </p>
             <h2 className="mx-auto mt-4 max-w-3xl text-balance text-4xl font-semibold tracking-normal text-slate-950 sm:text-6xl">
-              Why RentalRadar pricing wins.
+              The next generation of pricing is here.
             </h2>
           </div>
           <p className="mx-auto mt-5 max-w-3xl text-lg leading-8 text-slate-600">
-            Better pricing starts with the ultimate evidence: live market checks by AI agents plus your real booking
-            performance. The result is smarter rates, higher revenue, and total confidence in every decision.
+            RentalRadar combines Playwright-powered AI agents running headed Chrome with real booking performance,
+            occupancy, pace, and revenue data. It is live browser intelligence plus the numbers that prove what is
+            actually booking.
           </p>
           <div className="mt-6 inline-flex rounded-full border border-cyan-900/10 bg-cyan-50 px-5 py-2 text-sm font-semibold text-cyan-900">
             See -&gt; Decide -&gt; Explain -&gt; Push

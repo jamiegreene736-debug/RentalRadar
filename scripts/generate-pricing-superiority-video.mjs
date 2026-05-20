@@ -1,81 +1,90 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import sharp from "sharp";
 
 const width = 1280;
 const height = 720;
 const fps = 15;
-const duration = 47;
+const duration = 54;
 const frameCount = duration * fps;
 const outputDir = "apps/web/public";
 const frameDir = ".video-frames/pricing-superiority";
 const audioDir = ".video-frames/pricing-superiority-audio";
 const videoPath = `${outputDir}/pricing-superiority-overview.mp4`;
 const posterPath = `${outputDir}/pricing-superiority-poster.jpg`;
-const voicePath = `${audioDir}/voice.aiff`;
+const voicePath = `${audioDir}/voice.mp3`;
 
 const voiceover = [
-  "Most pricing tools are guessing with old data.",
-  "Here's why RentalRadar gets it right every single time.",
-  "Other tools rely on stale APIs and limited information.",
-  "They don't see what guests are actually seeing today.",
-  "RentalRadar uses an army of AI agents that do the manual research for you.",
-  "They check every listing live, exactly the way a guest sees it right now,",
-  "and combine it with your real bookings and revenue data.",
-  "So you get clear, trustworthy pricing recommendations that actually make you more money",
-  "with way less guesswork.",
-  "Smarter pricing. Higher revenue. Zero guesswork. That's RentalRadar.",
+  "The next generation of vacation rental pricing is here.",
+  "RentalRadar does not stop at stale feeds or generic market averages.",
+  "Our AI agents run live Playwright workflows in headed Chrome, checking the same guest-visible pages travelers use.",
+  "They watch comp prices, calendars, fees, availability, and booking signals as the market moves.",
+  "Then RentalRadar combines that live market evidence with your real booking data, occupancy, pace, lead time, and revenue.",
+  "The result is not a black box.",
+  "Every recommendation explains what changed, why it matters, and what rate gives you the best chance to win the booking.",
+  "Live browser intelligence plus real performance data.",
+  "That is the ultimate combination.",
+  "That is RentalRadar.",
 ].join(" ");
 
 const scenes = [
   {
     start: 0,
-    end: 8,
+    end: 7,
+    eyebrow: "Next-generation pricing",
+    headline: "The next generation of pricing is here.",
+    subhead: "Live AI browser intelligence meets real booking performance.",
+    overlay: "AI agents + real data.",
+  },
+  {
+    start: 7,
+    end: 17,
     eyebrow: "The old way",
-    headline: "Most pricing tools are guessing with old data.",
-    subhead: "RentalRadar checks what guests see right now.",
-    overlay: "Old data in. Stale guess out.",
+    headline: "Stale feeds miss what guests see today.",
+    subhead: "Generic market data cannot see every open night, fee, or guest-visible rate.",
+    overlay: "Old averages are not enough.",
   },
   {
-    start: 8,
-    end: 22,
-    eyebrow: "The problem",
-    headline: "Other tools miss what guests are actually seeing today.",
-    subhead: "Limited feeds cannot see every live listing, open night, or guest-visible price.",
-    overlay: "Stale feeds miss today's market.",
-  },
-  {
-    start: 22,
-    end: 35,
+    start: 17,
+    end: 32,
     eyebrow: "The RentalRadar difference",
-    headline: "An army of AI agents does the manual research for you.",
-    subhead: "They check Airbnb, VRBO, Booking.com, and comp properties live.",
-    overlay: "Live guest prices + your real bookings.",
+    headline: "AI agents browse live with headed Chrome.",
+    subhead: "Playwright workflows inspect Airbnb, VRBO, Booking.com, and direct booking pages.",
+    overlay: "See exactly what travelers see.",
   },
   {
-    start: 35,
+    start: 32,
     end: 43,
-    eyebrow: "The result",
-    headline: "Clear pricing recommendations you can actually trust.",
-    subhead: "Make more money with far less guesswork.",
-    overlay: "Know why every price changed.",
+    eyebrow: "The ultimate combination",
+    headline: "Live market evidence plus your real booking data.",
+    subhead: "Occupancy, pace, lead time, revenue, comps, and availability work together.",
+    overlay: "Browser intelligence + performance data.",
   },
   {
     start: 43,
-    end: 47,
+    end: 50,
+    eyebrow: "The decision layer",
+    headline: "Every price comes with a clear AI explanation.",
+    subhead: "Know what changed, why it matters, and where the rate should move.",
+    overlay: "No black box decisions.",
+  },
+  {
+    start: 50,
+    end: 54,
     eyebrow: "RentalRadar.ai",
-    headline: "Smarter pricing. Higher revenue. Zero guesswork.",
-    subhead: "That's RentalRadar.",
-    overlay: "Start free. No credit card.",
+    headline: "Live browser intelligence. Real data. Better rates.",
+    subhead: "The next generation of pricing is here.",
+    overlay: "That is RentalRadar.",
   },
 ];
 
 const liveChecks = [
-  ["VRBO", "Oceanfront villa", "$318", "calendar open live", "#0f766e"],
-  ["Airbnb", "Downtown loft", "$286", "guest rate live", "#be123c"],
-  ["Booking.com", "Resort suite", "$301", "availability live", "#1d4ed8"],
-  ["Your PM Website", "Direct booking", "$274", "checkout page live", "#b45309"],
+  ["Airbnb", "4BR beach house", "$486", "guest-visible total live", "#be123c"],
+  ["VRBO", "Oceanfront villa", "$522", "calendar and fees live", "#0f766e"],
+  ["Booking.com", "Resort suite", "$438", "availability live", "#1d4ed8"],
+  ["Direct site", "Brand.com checkout", "$469", "booking funnel live", "#b45309"],
 ];
 
 mkdirSync(outputDir, { recursive: true });
@@ -100,6 +109,79 @@ const xml = (value) =>
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+const envValue = (...names) => names.map((name) => process.env[name]).find((value) => value && value.trim());
+
+async function resolveElevenLabsVoiceId(apiKey, baseUrl) {
+  const explicitVoiceId = envValue("ELEVENLABS_VOICE_ID", "ELEVEN_VOICE_ID", "XI_VOICE_ID");
+
+  if (explicitVoiceId) {
+    return explicitVoiceId.trim();
+  }
+
+  const voicesResponse = await fetch(`${baseUrl}/voices`, {
+    headers: {
+      "xi-api-key": apiKey,
+    },
+  });
+
+  if (!voicesResponse.ok) {
+    throw new Error(`ElevenLabs voices request failed with ${voicesResponse.status}`);
+  }
+
+  const voicesData = await voicesResponse.json();
+  const voices = Array.isArray(voicesData?.voices) ? voicesData.voices : [];
+  const preferredVoice = voices.find((voice) => /adam|brian|chris|daniel|drew|george|josh/i.test(voice.name ?? "")) ?? voices[0];
+
+  if (!preferredVoice?.voice_id) {
+    throw new Error("ElevenLabs API key is present, but no voice ID was configured or returned by /voices.");
+  }
+
+  console.log(`Using ElevenLabs voice: ${preferredVoice.name ?? "configured account voice"}`);
+  return preferredVoice.voice_id;
+}
+
+async function generateElevenLabsVoiceover() {
+  const apiKey = envValue("ELEVENLABS_API_KEY", "ELEVEN_API_KEY", "XI_API_KEY");
+
+  if (!apiKey) {
+    return false;
+  }
+
+  const baseUrl = envValue("ELEVENLABS_BASE_URL", "ELEVEN_BASE_URL")?.replace(/\/$/, "") ?? "https://api.elevenlabs.io/v1";
+  const modelId = envValue("ELEVENLABS_MODEL_ID", "ELEVEN_MODEL_ID") ?? "eleven_multilingual_v2";
+  const voiceId = await resolveElevenLabsVoiceId(apiKey.trim(), baseUrl);
+  const endpoint = `${baseUrl}/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
+
+  console.log("Generating ElevenLabs voiceover from Railway environment variables.");
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Accept: "audio/mpeg",
+      "Content-Type": "application/json",
+      "xi-api-key": apiKey.trim(),
+    },
+    body: JSON.stringify({
+      text: voiceover,
+      model_id: modelId,
+      voice_settings: {
+        stability: 0.48,
+        similarity_boost: 0.78,
+        style: 0.28,
+        use_speaker_boost: true,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`ElevenLabs voiceover request failed with ${response.status}: ${detail.slice(0, 240)}`);
+  }
+
+  const audio = Buffer.from(await response.arrayBuffer());
+  await writeFile(voicePath, audio);
+  return true;
+}
 
 function text({ x, y, value, size = 32, weight = 700, fill = "#f8fafc", anchor = "start", opacity = 1, family = "Inter, Arial, sans-serif" }) {
   return `<text x="${x}" y="${y}" font-family="${family}" font-size="${size}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}" opacity="${opacity}">${xml(value)}</text>`;
@@ -143,23 +225,27 @@ function browserShell(time, address, body, opacity = 1) {
 }
 
 function oldDataScene(time, alpha) {
-  const p = ease(progress(time, 0, 8));
-  const needle = lerp(-45, 16, p);
+  const p = ease(progress(time, 0, 7));
+  const orbit = 188 + 8 * pulse(time, 0.35);
   return browserShell(
     time,
-    "old-data-pricing-tool.example",
+    "rentalradar.ai/next-generation-pricing",
     `
       ${rect({ x: 98, y: 190, w: 1084, h: 384, r: 0, fill: "#f8fafc" })}
-      ${rect({ x: 150, y: 242, w: 418, h: 230, r: 26, fill: "#fff7ed", stroke: "rgba(180,83,9,0.24)", sw: 2 })}
-      ${text({ x: 184, y: 292, value: "Old data", size: 42, weight: 950, fill: "#9a3412" })}
-      ${text({ x: 184, y: 340, value: "limited info", size: 28, weight: 760, fill: "#b45309" })}
-      ${text({ x: 184, y: 388, value: "best guess", size: 28, weight: 760, fill: "#b45309" })}
-      <g transform="translate(796 358)">
-        <circle cx="0" cy="0" r="104" fill="#ecfeff" stroke="#22d3ee" stroke-width="3" opacity="0.82"/>
-        <path d="M-70 40 A82 82 0 0 1 70 40" fill="none" stroke="#0e7490" stroke-width="8" stroke-linecap="round" opacity="0.35"/>
-        <path d="M0 0 L${Math.cos((needle - 90) * Math.PI / 180) * 76} ${Math.sin((needle - 90) * Math.PI / 180) * 76}" stroke="#f59e0b" stroke-width="8" stroke-linecap="round"/>
-        <circle cx="0" cy="0" r="10" fill="#0f172a"/>
-        ${text({ x: 0, y: 148, value: "RentalRadar checks live instead", size: 22, weight: 900, fill: "#0f172a", anchor: "middle" })}
+      ${rect({ x: 146, y: 236, w: 438, h: 284, r: 30, fill: "#0f172a", stroke: "rgba(103,232,249,0.28)", sw: 2 })}
+      ${text({ x: 184, y: 294, value: "AI pricing agent", size: 36, weight: 950, fill: "#e0f2fe" })}
+      ${text({ x: 184, y: 340, value: "Playwright + headed Chrome", size: 22, weight: 850, fill: "#67e8f9" })}
+      ${text({ x: 184, y: 382, value: "live comps, fees, calendars", size: 22, weight: 760, fill: "#cbd5e1" })}
+      ${text({ x: 184, y: 420, value: "your bookings and revenue", size: 22, weight: 760, fill: "#cbd5e1" })}
+      ${rect({ x: 184, y: 456, w: 228, h: 42, r: 21, fill: "#67e8f9", stroke: "none" })}
+      ${text({ x: 298, y: 483, value: "ULTIMATE COMBINATION", size: 14, weight: 950, fill: "#082f49", anchor: "middle" })}
+      <g transform="translate(842 360)">
+        <circle cx="0" cy="0" r="${orbit}" fill="none" stroke="#22d3ee" stroke-width="2" opacity="0.16"/>
+        <circle cx="0" cy="0" r="${130 + 10 * p}" fill="#ecfeff" stroke="#22d3ee" stroke-width="3" opacity="0.9"/>
+        <path d="M-58 14 C-22 -44 40 -44 68 12 C38 58 -24 60 -58 14Z" fill="#ffffff" stroke="#0e7490" stroke-width="5"/>
+        <circle cx="5" cy="11" r="32" fill="#22d3ee" opacity="0.25"/>
+        <circle cx="5" cy="11" r="13" fill="#0f172a"/>
+        ${text({ x: 0, y: 182, value: "See the market live", size: 23, weight: 950, fill: "#0f172a", anchor: "middle" })}
       </g>
     `,
     alpha,
@@ -184,9 +270,10 @@ function staleApiScene(time, alpha) {
       ${rect({ x: 98, y: 190, w: 1084, h: 384, r: 0, fill: "#f8fafc" })}
       ${cards}
       ${rect({ x: 630, y: 245, w: 406, h: 228, r: 28, fill: "#0f172a", stroke: "rgba(103,232,249,0.26)", sw: 2 })}
-      ${text({ x: 834, y: 300, value: "What guests see today?", size: 28, weight: 920, fill: "#e0f2fe", anchor: "middle" })}
-      ${text({ x: 834, y: 356, value: "Other tools often", size: 23, weight: 700, fill: "#94a3b8", anchor: "middle" })}
-      ${text({ x: 834, y: 392, value: "cannot see it.", size: 34, weight: 950, fill: "#fef3c7", anchor: "middle" })}
+      ${text({ x: 834, y: 296, value: "Guest-visible reality", size: 27, weight: 920, fill: "#e0f2fe", anchor: "middle" })}
+      ${text({ x: 834, y: 344, value: "fees, open nights,", size: 24, weight: 760, fill: "#94a3b8", anchor: "middle" })}
+      ${text({ x: 834, y: 380, value: "and last-minute moves", size: 24, weight: 760, fill: "#94a3b8", anchor: "middle" })}
+      ${text({ x: 834, y: 428, value: "missed by stale feeds", size: 29, weight: 950, fill: "#fef3c7", anchor: "middle" })}
     `,
     alpha,
   );
@@ -217,6 +304,10 @@ function liveResearchScene(time, alpha) {
     "airbnb.com  vrbo.com  booking.com  direct-site.com",
     `
       ${rect({ x: 98, y: 190, w: 1084, h: 384, r: 0, fill: "#f8fafc" })}
+      ${rect({ x: 150, y: 208, w: 246, h: 32, r: 16, fill: "#ecfeff", stroke: "rgba(14,116,144,0.18)" })}
+      ${text({ x: 273, y: 230, value: "Playwright headed Chrome", size: 14, weight: 900, fill: "#0e7490", anchor: "middle" })}
+      ${rect({ x: 418, y: 208, w: 188, h: 32, r: 16, fill: "#f0fdf4", stroke: "rgba(20,184,166,0.18)" })}
+      ${text({ x: 512, y: 230, value: "AI agent run", size: 14, weight: 900, fill: "#0f766e", anchor: "middle" })}
       ${rows}
       ${cursor(cursorX, cursorY, 1)}
     `,
@@ -243,10 +334,11 @@ function combineScene(time, alpha) {
       ${barSvg}
       ${text({ x: 184, y: 530, value: "occupancy, booking pace, and revenue", size: 16, weight: 760, fill: "#64748b" })}
       ${rect({ x: 660, y: 240, w: 392, h: 292, r: 26, fill: "#0f172a", stroke: "rgba(103,232,249,0.3)", sw: 2 })}
-      ${text({ x: 856, y: 296, value: "Live guest prices", size: 28, weight: 950, fill: "#e0f2fe", anchor: "middle" })}
-      ${text({ x: 856, y: 352, value: "+", size: 46, weight: 950, fill: "#67e8f9", anchor: "middle" })}
-      ${text({ x: 856, y: 406, value: "Your booking numbers", size: 28, weight: 950, fill: "#e0f2fe", anchor: "middle" })}
-      ${text({ x: 856, y: 470, value: "smarter price", size: 34, weight: 950, fill: "#fef3c7", anchor: "middle" })}
+      ${text({ x: 856, y: 290, value: "Live market evidence", size: 27, weight: 950, fill: "#e0f2fe", anchor: "middle" })}
+      ${text({ x: 856, y: 340, value: "+", size: 42, weight: 950, fill: "#67e8f9", anchor: "middle" })}
+      ${text({ x: 856, y: 388, value: "Real booking data", size: 27, weight: 950, fill: "#e0f2fe", anchor: "middle" })}
+      ${rect({ x: 736, y: 428, w: 240, h: 50, r: 25, fill: "#fef3c7", stroke: "none" })}
+      ${text({ x: 856, y: 460, value: "better rate decision", size: 21, weight: 950, fill: "#78350f", anchor: "middle" })}
     `,
     alpha,
   );
@@ -278,10 +370,11 @@ function recommendationScene(time, alpha) {
       ${rect({ x: 98, y: 190, w: 1084, h: 384, r: 0, fill: "#f8fafc" })}
       ${text({ x: 150, y: 226, value: "Clear recommendations", size: 32, weight: 950, fill: "#0f172a" })}
       ${rowSvg}
-      ${rect({ x: 710, y: 264, w: 342, h: 202, r: 26, fill: "#f0fdf4", stroke: "rgba(20,184,166,0.28)", sw: 2 })}
-      ${text({ x: 881, y: 326, value: "Trust the price", size: 31, weight: 950, fill: "#0f172a", anchor: "middle" })}
-      ${text({ x: 881, y: 374, value: "because you can see", size: 22, weight: 760, fill: "#475569", anchor: "middle" })}
-      ${text({ x: 881, y: 410, value: "why it changed.", size: 30, weight: 950, fill: "#0f766e", anchor: "middle" })}
+      ${rect({ x: 710, y: 250, w: 342, h: 230, r: 26, fill: "#f0fdf4", stroke: "rgba(20,184,166,0.28)", sw: 2 })}
+      ${text({ x: 881, y: 305, value: "LLM decision layer", size: 29, weight: 950, fill: "#0f172a", anchor: "middle" })}
+      ${text({ x: 881, y: 350, value: "3 comps dropped rates", size: 19, weight: 800, fill: "#475569", anchor: "middle" })}
+      ${text({ x: 881, y: 384, value: "booking pace is behind", size: 19, weight: 800, fill: "#475569", anchor: "middle" })}
+      ${text({ x: 881, y: 430, value: "move Sunday to $246", size: 27, weight: 950, fill: "#0f766e", anchor: "middle" })}
     `,
     alpha,
   );
@@ -316,22 +409,22 @@ function titleOverlay(time) {
     <g opacity="${alpha}">
       ${rect({ x: 74, y: 36, w: 1132, h: 58, r: 29, fill: "rgba(255,255,255,0.78)", stroke: "rgba(14,116,144,0.18)", sw: 1 })}
       ${text({ x: 110, y: 72, value: scene.eyebrow, size: 17, weight: 900, fill: "#0e7490" })}
-      ${text({ x: 1170, y: 72, value: `${Math.floor(time + 1)} / 47 sec`, size: 15, weight: 760, fill: "#64748b", anchor: "end" })}
+      ${text({ x: 1170, y: 72, value: `${Math.floor(time + 1)} / ${duration} sec`, size: 15, weight: 760, fill: "#64748b", anchor: "end" })}
     </g>`;
 }
 
 function sceneContent(time) {
-  const a1 = sceneAlpha(time, 0, 8);
-  const a2 = sceneAlpha(time, 8, 22);
-  const a3 = sceneAlpha(time, 22, 35);
-  const a4 = sceneAlpha(time, 35, 43);
-  const a5 = sceneAlpha(time, 43, 47);
+  const a1 = sceneAlpha(time, 0, 7);
+  const a2 = sceneAlpha(time, 7, 17);
+  const a3 = sceneAlpha(time, 17, 32);
+  const a4 = sceneAlpha(time, 43, 50);
+  const a5 = sceneAlpha(time, 50, 54);
 
   return `
     ${oldDataScene(time, a1)}
     ${staleApiScene(time, a2)}
     ${liveResearchScene(time, a3)}
-    ${combineScene(time, sceneAlpha(time, 29, 35))}
+    ${combineScene(time, sceneAlpha(time, 32, 43))}
     ${recommendationScene(time, a4)}
     ${finalScene(time, a5)}
   `;
@@ -340,13 +433,11 @@ function sceneContent(time) {
 function lowerThird(time) {
   const scene = scenes.find((entry) => time >= entry.start && time < entry.end) ?? scenes.at(-1);
   const alpha = sceneAlpha(time, scene.start, scene.end, 0.4);
-  const lines = scene.headline.length > 52
-    ? scene.headline.replace(" with ", " with|").split("|")
-    : [scene.headline];
+  const lines = wrapLines(scene.headline, 50);
   return `
     <g opacity="${alpha}">
       ${rect({ x: 74, y: 604, w: 1132, h: 82, r: 24, fill: "rgba(15,23,42,0.88)", stroke: "rgba(103,232,249,0.22)", sw: 1.4 })}
-      ${multiline({ x: 110, y: 636, lines, size: lines.length > 1 ? 24 : 27, weight: 920, fill: "#ffffff", lineHeight: 1.05 })}
+      ${multiline({ x: 110, y: 636, lines, size: lines.length > 1 ? 23 : 27, weight: 920, fill: "#ffffff", lineHeight: 1.05 })}
       ${text({ x: 110, y: 670, value: scene.overlay, size: 17, weight: 760, fill: "#a7f3ff" })}
     </g>`;
 }
@@ -386,6 +477,25 @@ function svgFrame(frame) {
   </svg>`;
 }
 
+function wrapLines(value, maxLength = 52) {
+  return value.split(" ").reduce(
+    (lines, word) => {
+      const current = lines.at(-1) ?? "";
+      if (!current) {
+        lines[lines.length - 1] = word;
+        return lines;
+      }
+      if (`${current} ${word}`.length > maxLength) {
+        lines.push(word);
+        return lines;
+      }
+      lines[lines.length - 1] = `${current} ${word}`;
+      return lines;
+    },
+    [""],
+  );
+}
+
 for (let frame = 0; frame < frameCount; frame += 1) {
   const name = join(frameDir, `frame-${String(frame).padStart(4, "0")}.png`);
   await sharp(Buffer.from(svgFrame(frame))).png().toFile(name);
@@ -395,20 +505,32 @@ await sharp(Buffer.from(svgFrame(Math.floor(fps * 2.2))))
   .jpeg({ quality: 88, mozjpeg: true })
   .toFile(posterPath);
 
-const sayAvailable = spawnSync("which", ["say"], { encoding: "utf8" }).status === 0;
 let voiceDuration = duration;
 let voiceFilter = "anull";
 let voiceInput = ["-f", "lavfi", "-t", String(duration), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"];
+const hasElevenLabsVoiceover = await generateElevenLabsVoiceover();
 
-if (sayAvailable) {
-  const say = spawnSync("say", ["-v", "Alex", "-r", "150", "-o", voicePath, voiceover], {
-    stdio: "inherit",
-  });
+if (!hasElevenLabsVoiceover) {
+  const sayAvailable = spawnSync("which", ["say"], { encoding: "utf8" }).status === 0;
 
-  if (say.status !== 0) {
-    process.exit(say.status ?? 1);
+  if (sayAvailable) {
+    const localVoicePath = `${audioDir}/voice.aiff`;
+    console.warn("ELEVENLABS_API_KEY was not found. Falling back to local macOS voice for development.");
+    const say = spawnSync("say", ["-v", "Alex", "-r", "150", "-o", localVoicePath, voiceover], {
+      stdio: "inherit",
+    });
+
+    if (say.status !== 0) {
+      process.exit(say.status ?? 1);
+    }
+
+    await import("node:fs/promises").then(({ rename }) => rename(localVoicePath, voicePath));
+  } else {
+    console.warn("No ElevenLabs API key or macOS 'say' command found. Generating the video with music only.");
   }
+}
 
+if (hasElevenLabsVoiceover || spawnSync("test", ["-f", voicePath]).status === 0) {
   const probe = spawnSync(
     "ffprobe",
     ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", voicePath],
@@ -418,8 +540,6 @@ if (sayAvailable) {
   const tempo = clamp(voiceDuration / duration, 0.5, 2);
   voiceFilter = `atempo=${tempo.toFixed(6)},apad,atrim=0:${duration}`;
   voiceInput = ["-i", voicePath];
-} else {
-  console.warn("macOS 'say' command not found. Generating the video with music only.");
 }
 
 const ffmpeg = spawnSync(
@@ -450,7 +570,7 @@ const ffmpeg = spawnSync(
     "-i",
     "sine=frequency=329.63:sample_rate=44100",
     "-filter_complex",
-    `[1:a]${voiceFilter},volume=1.45[voice];[2:a]volume=0.012,afade=t=in:st=0:d=1.2,afade=t=out:st=44.5:d=2.5[m1];[3:a]volume=0.006,afade=t=in:st=0:d=1.2,afade=t=out:st=44.5:d=2.5[m2];[4:a]volume=0.004,afade=t=in:st=0:d=1.2,afade=t=out:st=44.5:d=2.5[m3];[voice][m1][m2][m3]amix=inputs=4:duration=longest,atrim=0:${duration}[a]`,
+    `[1:a]${voiceFilter},volume=1.35[voice];[2:a]volume=0.010,afade=t=in:st=0:d=1.2,afade=t=out:st=${duration - 2.5}:d=2.5[m1];[3:a]volume=0.005,afade=t=in:st=0:d=1.2,afade=t=out:st=${duration - 2.5}:d=2.5[m2];[4:a]volume=0.003,afade=t=in:st=0:d=1.2,afade=t=out:st=${duration - 2.5}:d=2.5[m3];[voice][m1][m2][m3]amix=inputs=4:duration=longest,atrim=0:${duration}[a]`,
     "-map",
     "0:v:0",
     "-map",
@@ -480,45 +600,45 @@ if (ffmpeg.status !== 0) {
 }
 
 const storyboardPath = `${outputDir}/pricing-superiority-storyboard.txt`;
-const storyboard = `RentalRadar.ai 47-second explainer
+const storyboard = `RentalRadar.ai ${duration}-second explainer
 
 Voiceover voice:
-Warm, friendly, confident American male, age 35-42. Conversational, trustworthy, clear, positive, and helpful.
+ElevenLabs text-to-speech. Warm, friendly, confident American narrator. Conversational, trustworthy, clear, positive, and helpful.
 
 Full voiceover script:
 ${voiceover}
 
 Storyboard:
-0-8 sec - Hook
-Visual: Old pricing dashboard, stale-data cards, and a guess meter moving from old data to RentalRadar live checks.
-On-screen text: Most pricing tools are guessing with old data. / Old data in. Stale guess out.
+0-7 sec - Next-generation pricing
+Visual: RentalRadar AI pricing agent panel beside an animated live-market eye and radar rings.
+On-screen text: The next generation of pricing is here. / AI agents + real data.
 
-8-22 sec - Problem with other tools
-Visual: Cards for yesterday's rates, missing open nights, and no guest view beside a dark panel asking what guests see today.
-On-screen text: Other tools miss what guests are actually seeing today. / Stale feeds miss today's market.
+7-17 sec - Problem with stale tools
+Visual: Stale-feed cards for yesterday's rates, missing open nights, and no guest view beside a dark guest-visible reality panel.
+On-screen text: Stale feeds miss what guests see today. / Old averages are not enough.
 
-22-35 sec - RentalRadar difference
-Visual: Four live check cards for VRBO, Airbnb, Booking.com, and Your PM Website with a cursor clicking through live prices.
-On-screen text: An army of AI agents does the manual research for you. / Live guest prices + your real bookings.
+17-32 sec - RentalRadar difference
+Visual: Playwright headed Chrome and AI agent badges above four live check cards for Airbnb, VRBO, Booking.com, and a direct booking site.
+On-screen text: AI agents browse live with headed Chrome. / See exactly what travelers see.
 
-29-35 sec - Booking data blend
-Visual: Your booking bars combine with live guest prices to create a smarter price.
-On-screen text: Live guest prices + your booking numbers = smarter price.
+32-43 sec - Ultimate combination
+Visual: Your real bookings and revenue bars combine with live guest-market evidence into a better rate decision.
+On-screen text: Live market evidence plus your real booking data. / Browser intelligence + performance data.
 
-35-43 sec - Benefit
-Visual: Daily recommendation rows show raise, hold, and fill-gap moves with a friendly explanation card.
-On-screen text: Clear pricing recommendations you can actually trust. / Know why every price changed.
+43-50 sec - LLM decision layer
+Visual: Daily recommendation rows show raise, hold, and fill-gap moves with an LLM explanation card.
+On-screen text: Every price comes with a clear AI explanation. / No black box decisions.
 
-43-47 sec - Close
+50-54 sec - Close
 Visual: RentalRadar.ai end card with radar rings and a Start free call to action.
-On-screen text: Smarter pricing. Higher revenue. Zero guesswork. / Start free - no credit card.
+On-screen text: Live browser intelligence. Real data. Better rates. / That is RentalRadar.
 
 Background music:
 Upbeat, modern, clean, light electronic pulse under the voice. Friendly momentum, not corporate, and quiet enough that the voice stays primary.
 `;
 
 rmSync(storyboardPath, { force: true });
-await import("node:fs/promises").then(({ writeFile }) => writeFile(storyboardPath, storyboard));
+await writeFile(storyboardPath, storyboard);
 
 console.log(`Generated ${videoPath}, ${posterPath}, and ${storyboardPath}`);
 console.log(`Voiceover source duration: ${voiceDuration.toFixed(2)}s, final video duration: ${duration}s`);
