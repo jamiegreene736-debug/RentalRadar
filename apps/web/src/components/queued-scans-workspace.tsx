@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Chrome, Clock3, LoaderCircle, RefreshCw, RotateCcw, TimerReset } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Chrome, Clock3, LoaderCircle, RefreshCw, RotateCcw, TimerReset, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import type { PropertyResponse, ScrapeSession, ScrapeSessionsResponse } from "@/lib/types";
@@ -35,6 +35,8 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [bulkRetryOpen, setBulkRetryOpen] = useState(false);
+  const [bulkRetrying, setBulkRetrying] = useState(false);
 
   const targetProperties = useMemo(
     () =>
@@ -48,6 +50,14 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
     [sessions],
   );
   const visibleSessions = activeSessions.length ? activeSessions : sessions.slice(0, 8);
+  const retryableSessions = useMemo(
+    () => sessions.filter((session) => retryInfo(session).eligible),
+    [sessions],
+  );
+  const reviewSessions = useMemo(
+    () => sessions.filter((session) => ["failed", "needs_review", "canceled"].includes(session.status)),
+    [sessions],
+  );
   const counts = useMemo(
     () => ({
       queued: sessions.filter((session) => session.status === "queued").length,
@@ -133,6 +143,44 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
     }
   }
 
+  async function retryFailedScans() {
+    if (!retryableSessions.length || bulkRetrying) return;
+    setBulkRetrying(true);
+    setActionMessage(null);
+    setRetryingIds(new Set(retryableSessions.map((session) => session.id)));
+    try {
+      const results = await Promise.allSettled(
+        retryableSessions.map(async (session) => {
+          const response = await fetch(`/api/backend/properties/${session.property.id}/scrape-sessions/${session.id}/retry`, {
+            method: "POST",
+            headers: { Accept: "application/json" },
+            cache: "no-store",
+          });
+          if (!response.ok) throw new Error(await retryErrorMessage(response));
+          const retrySession = (await response.json()) as ScrapeSession;
+          return { ...retrySession, property: session.property };
+        }),
+      );
+      const queued = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+      const failed = results.length - queued.length;
+      if (queued.length) {
+        setSessions((current) => [
+          ...queued,
+          ...current,
+        ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+      }
+      setBulkRetryOpen(false);
+      setActionMessage(
+        failed
+          ? `${queued.length} scan${queued.length === 1 ? "" : "s"} queued. ${failed} could not be queued because it no longer needs a retry or hit the retry limit.`
+          : `${queued.length} scan${queued.length === 1 ? "" : "s"} queued for another pass.`,
+      );
+    } finally {
+      setRetryingIds(new Set());
+      setBulkRetrying(false);
+    }
+  }
+
   if (!properties.length) {
     return (
       <section className="rounded-lg border border-cyan-900/10 bg-white p-6 shadow-sm">
@@ -188,10 +236,25 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
                 : "No active scans right now. Showing the latest saved Chrome runs."}
             </p>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-cyan-900/10 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-800">
-            {status === "loading" ? <LoaderCircle className="size-3.5 animate-spin" /> : <Clock3 className="size-3.5" />}
-            Refreshes every 2.5s
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setBulkRetryOpen(true)}
+              disabled={!retryableSessions.length || bulkRetrying}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+            >
+              {bulkRetrying ? <LoaderCircle className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+              Retry failed scans
+              {retryableSessions.length ? <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs">{retryableSessions.length}</span> : null}
+            </button>
+            <span className="inline-flex items-center gap-2 rounded-full border border-cyan-900/10 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-800">
+              {status === "loading" ? <LoaderCircle className="size-3.5 animate-spin" /> : <Clock3 className="size-3.5" />}
+              Refreshes every 2.5s
+            </span>
+          </div>
+        </div>
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Failed scans get a short automatic retry from the browser worker first. This button queues another pass for the scans that still need one, and stops once a scan hits its retry limit.
         </div>
         {actionMessage ? (
           <div className="mt-4 rounded-lg border border-cyan-900/10 bg-cyan-50 px-4 py-3 text-sm font-medium text-cyan-900">
@@ -247,6 +310,16 @@ export function QueuedScansWorkspace({ properties }: { properties: PropertyRespo
           </div>
         )}
       </div>
+
+      {bulkRetryOpen ? (
+        <BulkRetryModal
+          retryableSessions={retryableSessions}
+          reviewCount={reviewSessions.length}
+          retrying={bulkRetrying}
+          onClose={() => setBulkRetryOpen(false)}
+          onConfirm={retryFailedScans}
+        />
+      ) : null}
     </section>
   );
 }
@@ -268,7 +341,7 @@ function QueueScanRow({ session, retrying, onRetry }: { session: ScanWithPropert
       </div>
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Status</p>
-        <StatusBadge status={session.status} variant="light" />
+        <StatusBadge status={displayStatus(session)} variant="light" />
         <p className="mt-1 text-xs text-slate-500">{session.queue_position ? `Queue position ${session.queue_position}` : formatDate(session.started_at ?? session.created_at)}</p>
       </div>
       <div>
@@ -288,7 +361,7 @@ function QueueScanRow({ session, retrying, onRetry }: { session: ScanWithPropert
             title={retry.reason ?? undefined}
             className="inline-flex min-h-10 max-w-full items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600"
           >
-            <span className="truncate">{retry.reason ?? activeCopy(session.status)}</span>
+            <span className="truncate">{actionCopy(session, retry)}</span>
           </span>
         )}
       </div>
@@ -349,7 +422,7 @@ function QueuedScanCard({ session, retrying, onRetry }: { session: ScanWithPrope
 
       <div className="border-t border-white/10 bg-slate-950 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <StatusBadge status={session.status} />
+          <StatusBadge status={displayStatus(session)} />
           <span className="text-xs font-medium text-slate-400">
             {session.queue_position ? `Queue position ${session.queue_position}` : formatDate(session.started_at ?? session.created_at)}
           </span>
@@ -386,6 +459,99 @@ function QueuedScanCard({ session, retrying, onRetry }: { session: ScanWithPrope
         ) : null}
       </div>
     </article>
+  );
+}
+
+function BulkRetryModal({
+  retryableSessions,
+  reviewCount,
+  retrying,
+  onClose,
+  onConfirm,
+}: {
+  retryableSessions: ScanWithProperty[];
+  reviewCount: number;
+  retrying: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const skippedCount = Math.max(0, reviewCount - retryableSessions.length);
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
+      <div className="w-full max-w-2xl rounded-lg border border-cyan-900/10 bg-white p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">Retry failed scans</p>
+            <h2 className="mt-2 text-xl font-semibold text-slate-950">Queue another pass for scans that still need it</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              RentalRadar will retry the eligible failed or needs-review scans below. Scans already completed in a newer run, already running, or at the retry limit will stay untouched.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={retrying}
+            className="grid size-9 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label="Close retry scans modal"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-slate-200">
+          {retryableSessions.length ? (
+            <div className="max-h-72 divide-y divide-slate-200 overflow-auto">
+              {retryableSessions.slice(0, 12).map((session) => (
+                <div key={session.id} className="grid gap-1 px-4 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-slate-950">{propertyLabel(session.property)}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {sourceLabels[session.source] ?? session.source} · {scanWindow(session)}
+                    </p>
+                  </div>
+                  <StatusBadge status={session.status} variant="light" />
+                </div>
+              ))}
+              {retryableSessions.length > 12 ? (
+                <div className="px-4 py-3 text-sm font-medium text-slate-600">
+                  Plus {retryableSessions.length - 12} more eligible scans.
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="px-4 py-6 text-sm leading-6 text-slate-600">
+              No failed scans are eligible for another retry right now.
+            </div>
+          )}
+        </div>
+
+        {skippedCount ? (
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            {skippedCount} review item{skippedCount === 1 ? "" : "s"} will be skipped because a newer scan already completed, a retry is already running, or the retry limit was reached.
+          </p>
+        ) : null}
+
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={retrying}
+            className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={!retryableSessions.length || retrying}
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+          >
+            {retrying ? <LoaderCircle className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+            Queue {retryableSessions.length || "no"} scan{retryableSessions.length === 1 ? "" : "s"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -454,6 +620,30 @@ function retryInfo(session: ScrapeSession) {
   };
 }
 
+function displayStatus(session: ScrapeSession) {
+  const diagnostics = session.diagnostics ?? {};
+  if (
+    ["failed", "needs_review", "canceled"].includes(session.status)
+    && typeof diagnostics.superseded_by_job_id === "string"
+    && diagnostics.superseded_by_job_id
+  ) {
+    return "rescanned";
+  }
+  return session.status;
+}
+
+function actionCopy(session: ScrapeSession, retry: ReturnType<typeof retryInfo>) {
+  const diagnostics = session.diagnostics ?? {};
+  if (
+    ["failed", "needs_review", "canceled"].includes(session.status)
+    && typeof diagnostics.superseded_by_job_id === "string"
+    && diagnostics.superseded_by_job_id
+  ) {
+    return "Already rescanned";
+  }
+  return retry.reason ?? activeCopy(session.status);
+}
+
 async function retryErrorMessage(response: Response) {
   try {
     const payload = (await response.json()) as { detail?: unknown };
@@ -472,6 +662,7 @@ function activeCopy(status: string) {
 }
 
 function statusLabel(status: string) {
+  if (status === "rescanned") return "Rescanned";
   if (status === "queued") return "Queued";
   if (status === "running") return "Chrome running";
   if (status === "succeeded") return "Complete";
@@ -486,12 +677,14 @@ function statusClass(status: string, variant: "dark" | "light" = "dark") {
     if (status === "queued") return "border-amber-200 bg-amber-50 text-amber-700";
     if (status === "running") return "border-cyan-200 bg-cyan-50 text-cyan-700";
     if (status === "succeeded") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    if (status === "rescanned") return "border-emerald-200 bg-emerald-50 text-emerald-700";
     if (status === "failed" || status === "needs_review") return "border-rose-200 bg-rose-50 text-rose-700";
     return "border-slate-200 bg-slate-50 text-slate-600";
   }
   if (status === "queued") return "border-amber-300/30 bg-amber-300/10 text-amber-100";
   if (status === "running") return "border-cyan-300/30 bg-cyan-300/10 text-cyan-100";
   if (status === "succeeded") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-100";
+  if (status === "rescanned") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-100";
   if (status === "failed" || status === "needs_review") return "border-rose-300/30 bg-rose-300/10 text-rose-100";
   return "border-slate-300/20 bg-slate-300/10 text-slate-200";
 }
