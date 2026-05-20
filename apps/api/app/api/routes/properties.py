@@ -1351,7 +1351,13 @@ def _manual_retry_policy(db: Session, job: ScrapeJob) -> dict[str, Any]:
     disabled_reason: str | None = None
     superseded_by_job_id: str | None = None
 
-    if newer_success is not None:
+    if job.status == ScrapeJobStatus.succeeded:
+        retry_eligible = False
+        disabled_reason = "This scan already completed."
+    elif job.status in {ScrapeJobStatus.queued, ScrapeJobStatus.running}:
+        retry_eligible = False
+        disabled_reason = "This scan is already waiting or running."
+    elif newer_success is not None:
         retry_eligible = False
         superseded_by_job_id = str(newer_success.id)
         disabled_reason = "This scan already completed in a newer retry."
@@ -1362,12 +1368,6 @@ def _manual_retry_policy(db: Session, job: ScrapeJob) -> dict[str, Any]:
     elif attempts_used >= MANUAL_RETRY_LIMIT:
         retry_eligible = False
         disabled_reason = f"Retry limit reached. We stopped after {MANUAL_RETRY_LIMIT} retries so this scan does not loop."
-    elif job.status in {ScrapeJobStatus.queued, ScrapeJobStatus.running}:
-        retry_eligible = False
-        disabled_reason = "This scan is already waiting or running."
-    elif job.status == ScrapeJobStatus.succeeded:
-        retry_eligible = False
-        disabled_reason = "This scan already completed."
     elif not retry_eligible:
         disabled_reason = "This scan does not need a retry."
 

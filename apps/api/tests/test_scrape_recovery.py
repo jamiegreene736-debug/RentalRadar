@@ -222,6 +222,31 @@ def test_manual_retry_policy_blocks_old_scan_after_newer_success() -> None:
     assert policy["retry_disabled_reason"] == "This scan already completed in a newer retry."
 
 
+def test_manual_retry_policy_labels_completed_scan_as_complete() -> None:
+    organization_id = uuid4()
+    property_id = uuid4()
+    root = _scrape_job(
+        organization_id=organization_id,
+        property_id=property_id,
+        status=ScrapeJobStatus.failed,
+        created_at=datetime(2026, 5, 20, 12, tzinfo=timezone.utc),
+    )
+    retry_success = _scrape_job(
+        organization_id=organization_id,
+        property_id=property_id,
+        status=ScrapeJobStatus.succeeded,
+        created_at=datetime(2026, 5, 20, 12, 5, tzinfo=timezone.utc),
+        request_context={"trigger": "manual_retry", "retried_from_job_id": str(root.id)},
+    )
+    db = Mock()
+    db.scalars.return_value = _ScalarResult([root, retry_success])
+
+    policy = properties._manual_retry_policy(db, retry_success)
+
+    assert policy["retry_eligible"] is False
+    assert policy["retry_disabled_reason"] == "This scan already completed."
+
+
 def test_current_page_url_ignores_telemetry_requests() -> None:
     now = datetime.now(timezone.utc)
     events = [
